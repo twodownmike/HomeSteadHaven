@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useGameStore } from '../../store';
-import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective } from '../../types';
+import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION } from '../../types';
 import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2 } from 'lucide-react';
 
 const ResourceIcon = ({ type }: { type: ResourceType }) => {
@@ -40,6 +40,7 @@ export const GameUI: React.FC = () => {
     unassignWorker,
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
+  const [showBuildMenu, setShowBuildMenu] = useState(false);
 
   const handleBuildSelect = (type: BuildingType) => {
     if (selectedBuilding === type && isBuilding) {
@@ -115,6 +116,33 @@ export const GameUI: React.FC = () => {
 
   const workerCapacity = selectedStats?.workers || 0;
   const workerText = workerCapacity ? `${assignedWorkers}/${workerCapacity} workers` : 'No workers needed';
+
+  const buildBenefits = useMemo(() => {
+    const map: Record<BuildingType, string[]> = {} as Record<BuildingType, string[]>;
+    (Object.keys(BUILDING_COSTS) as BuildingType[]).forEach((type) => {
+      const stats = BUILDING_STATS[type];
+      const production = RESOURCE_GENERATION[type];
+      const perks: string[] = [];
+      if (stats.housing) perks.push(`Housing +${stats.housing}`);
+      if (stats.storage) perks.push(`Storage +${stats.storage} per level`);
+      if (stats.workers) perks.push(`Needs ${stats.workers} worker${stats.workers > 1 ? 's' : ''}`);
+      if (stats.happiness) perks.push(`Happiness +${stats.happiness} per level`);
+      if (production) {
+        Object.entries(production).forEach(([res, amt]) => {
+          if (amt && amt > 0) perks.push(`Produces ${amt}/tick ${res}`);
+        });
+      }
+      // Flavor
+      if (type === 'campfire') perks.push('Cozy spot that boosts happiness and eases bad weather.');
+      if (type === 'watchtower') perks.push('Mitigates storms, improves expeditions.');
+      if (type === 'fishery') perks.push('Food income even through winter.');
+      if (type === 'well') perks.push('Reduces rain/snow mood penalty.');
+      if (type === 'bakery') perks.push('Extra food and morale.');
+      if (type === 'warehouse') perks.push('Major storage expansion.');
+      map[type] = perks;
+    });
+    return map;
+  }, []);
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4">
@@ -263,181 +291,199 @@ export const GameUI: React.FC = () => {
 
       {/* Building Inspection Panel */}
       {selectedBuildingData && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-40 min-w-[300px]">
-              <div className="flex justify-between items-start mb-4">
-                  <div>
-                      <h3 className="font-bold text-xl capitalize">{selectedBuildingData.type}</h3>
-                      <p className="text-gray-400 text-sm">Level {selectedBuildingData.level}</p>
-                  </div>
-                  <button onClick={() => selectBuildingId(null)} className="text-gray-400 hover:text-white">
-                      <X className="w-5 h-5" />
-                  </button>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                  {/* Stats */}
-                  {selectedStats && (
-                    <div className="grid grid-cols-2 gap-2 text-xs bg-white/5 border border-white/10 rounded-xl p-3">
-                        {selectedStats.housing && <div className="text-gray-200">Housing: +{selectedStats.housing}</div>}
-                        {selectedStats.storage && <div className="text-gray-200">Storage: +{selectedStats.storage * selectedBuildingData.level}</div>}
-                        {selectedStats.happiness && <div className="text-gray-200">Happiness: +{(selectedStats.happiness * selectedBuildingData.level).toFixed(1)}</div>}
-                        {selectedStats.workers !== undefined && (
-                            <div className="text-gray-200">{workerText}</div>
-                        )}
-                    </div>
-                  )}
-
-                  {/* Staffing */}
-                  {selectedStats?.workers && (
-                    <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-3 text-sm">
-                        <div>
-                            <div className="font-semibold">Workers</div>
-                            <div className="text-gray-300">{workerText}</div>
-                        </div>
-                        <div className="flex gap-2">
-                            <button 
-                              onClick={() => assignWorker(selectedBuildingData.id)}
-                              className="px-3 py-2 rounded-lg bg-green-600/30 hover:bg-green-600/50 border border-green-400 text-green-50 text-xs"
-                            >
-                              + Assign
-                            </button>
-                            <button 
-                              onClick={() => unassignWorker(selectedBuildingData.id)}
-                              className="px-3 py-2 rounded-lg bg-yellow-600/30 hover:bg-yellow-600/50 border border-yellow-400 text-yellow-50 text-xs"
-                            >
-                              - Unassign
-                            </button>
-                        </div>
-                    </div>
-                  )}
-
-                  <button 
-                      onClick={() => upgradeBuilding(selectedBuildingData.id)}
-                      disabled={!canAffordUpgrade}
-                      className={`
-                          flex items-center justify-between p-3 rounded-xl border border-white/10 transition-all
-                          ${canAffordUpgrade ? 'bg-green-600/20 hover:bg-green-600/40 border-green-500/50' : 'bg-gray-800/50 opacity-50 cursor-not-allowed'}
-                      `}
-                  >
-                      <div className="flex items-center gap-2">
-                          <ArrowUpCircle className="w-5 h-5 text-green-400" />
-                          <div className="text-left">
-                              <div className="font-bold">Upgrade</div>
-                              <div className="text-xs text-gray-300">Increases efficiency</div>
-                          </div>
-                      </div>
-                      
-                      {/* Upgrade Cost */}
-                      <div className="flex flex-col items-end text-xs">
-                          {upgradeCost && Object.entries(upgradeCost).map(([res, amount]) => (
-                              <div key={res} className={resources[res as ResourceType] < amount * upgradeMultiplier ? 'text-red-400' : 'text-gray-300'}>
-                                  {amount * upgradeMultiplier} {res.charAt(0).toUpperCase()}
-                              </div>
-                          ))}
-                      </div>
-                  </button>
-
-                  <button 
-                      onClick={() => demolishBuilding(selectedBuildingData.id)}
-                      className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 hover:bg-red-500/30 border border-red-500/30 text-red-200 transition-colors"
-                  >
-                      <Trash2 className="w-5 h-5" />
-                      Demolish Building
-                  </button>
-              </div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-40 min-w-[300px]">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="font-bold text-xl capitalize">{selectedBuildingData.type}</h3>
+              <p className="text-gray-400 text-sm">Level {selectedBuildingData.level}</p>
+            </div>
+            <button onClick={() => selectBuildingId(null)} className="text-gray-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
           </div>
+
+          <div className="flex flex-col gap-3">
+            {/* Stats */}
+            {selectedStats && (
+              <div className="grid grid-cols-2 gap-2 text-xs bg-white/5 border border-white/10 rounded-xl p-3">
+                {selectedStats.housing && <div className="text-gray-200">Housing: +{selectedStats.housing}</div>}
+                {selectedStats.storage && <div className="text-gray-200">Storage: +{selectedStats.storage * selectedBuildingData.level}</div>}
+                {selectedStats.happiness && <div className="text-gray-200">Happiness: +{(selectedStats.happiness * selectedBuildingData.level).toFixed(1)}</div>}
+                {selectedStats.workers !== undefined && <div className="text-gray-200">{workerText}</div>}
+              </div>
+            )}
+
+            {/* Staffing */}
+            {selectedStats?.workers && (
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-3 text-sm">
+                <div>
+                  <div className="font-semibold">Workers</div>
+                  <div className="text-gray-300">{workerText}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => assignWorker(selectedBuildingData.id)}
+                    className="px-3 py-2 rounded-lg bg-green-600/30 hover:bg-green-600/50 border border-green-400 text-green-50 text-xs"
+                  >
+                    + Assign
+                  </button>
+                  <button
+                    onClick={() => unassignWorker(selectedBuildingData.id)}
+                    className="px-3 py-2 rounded-lg bg-yellow-600/30 hover:bg-yellow-600/50 border border-yellow-400 text-yellow-50 text-xs"
+                  >
+                    - Unassign
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => upgradeBuilding(selectedBuildingData.id)}
+              disabled={!canAffordUpgrade}
+              className={`
+                flex items-center justify-between p-3 rounded-xl border border-white/10 transition-all
+                ${canAffordUpgrade ? 'bg-green-600/20 hover:bg-green-600/40 border-green-500/50' : 'bg-gray-800/50 opacity-50 cursor-not-allowed'}
+              `}
+            >
+              <div className="flex items-center gap-2">
+                <ArrowUpCircle className="w-5 h-5 text-green-400" />
+                <div className="text-left">
+                  <div className="font-bold">Upgrade</div>
+                  <div className="text-xs text-gray-300">Increases efficiency</div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end text-xs">
+                {upgradeCost && Object.entries(upgradeCost).map(([res, amount]) => (
+                  <div key={res} className={resources[res as ResourceType] < amount * upgradeMultiplier ? 'text-red-400' : 'text-gray-300'}>
+                    {amount * upgradeMultiplier} {res.charAt(0).toUpperCase()}
+                  </div>
+                ))}
+              </div>
+            </button>
+
+            <button
+              onClick={() => demolishBuilding(selectedBuildingData.id)}
+              className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 hover:bg-red-500/30 border border-red-500/30 text-red-200 transition-colors"
+            >
+              <Trash2 className="w-5 h-5" />
+              Demolish Building
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* Bottom HUD: Build Menu */}
-      <div className="flex flex-col items-center gap-4 pointer-events-auto mb-4 w-full px-4">
-        {isBuilding && (
-            <div className="bg-black/80 text-white px-6 py-3 rounded-full text-base animate-pulse border border-yellow-500/50 shadow-lg">
-                Placing {selectedBuilding}... (Tap to build)
-            </div>
-        )}
-        
-        <div className="flex gap-3 bg-black/80 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-2xl overflow-x-auto w-full max-w-full scrollbar-hide">
-          {(Object.keys(BUILDING_COSTS) as BuildingType[]).map((type) => {
-            const costs = BUILDING_COSTS[type];
-            const isSelected = selectedBuilding === type;
-            const canAfford = (Object.keys(costs) as ResourceType[]).every(
-                (r) => resources[r] >= (costs[r] || 0)
-            );
-
-            return (
-              <button
-                key={type}
-                onClick={() => handleBuildSelect(type)}
-                disabled={!canAfford}
-                className={`
-                  relative group flex flex-col items-center gap-2 p-4 rounded-xl transition-all duration-200 min-w-[110px] flex-shrink-0
-                  ${isSelected ? 'bg-yellow-600 text-white ring-2 ring-yellow-400' : 'bg-white/5 hover:bg-white/10 text-gray-300'}
-                  ${!canAfford ? 'opacity-50 cursor-not-allowed grayscale' : 'active:scale-95'}
-                `}
-              >
-                <span className="capitalize font-bold text-sm md:text-base">{type.replace(/([A-Z])/g, ' $1').trim()}</span>
-                
-                {/* Cost Tooltip/Indicator */}
-                <div className="flex gap-2 text-xs">
-                    {Object.entries(costs).map(([res, amount]) => (
-                        <div key={res} className="flex items-center gap-1">
-                             {/* Just simple text for cost to keep it clean */}
-                             <span className={resources[res as ResourceType] < amount ? "text-red-400" : "text-gray-400"}>
-                                {amount} {res.charAt(0).toUpperCase()}
-                             </span>
-                        </div>
-                    ))}
-                </div>
-              </button>
-            );
-          })}
+      {/* Bottom HUD */}
+      <div className="pointer-events-none w-full px-4 pb-4 flex flex-col gap-3">
+        {/* Build toggle & panel */}
+        <div className="flex justify-end pointer-events-auto">
+          <button
+            onClick={() => setShowBuildMenu((v: boolean) => !v)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold shadow-lg transition-colors ${showBuildMenu ? 'bg-yellow-500/20 border-yellow-300 text-yellow-100' : 'bg-black/60 border-white/10 text-white hover:bg-white/10'}`}
+          >
+            <Hammer className="w-4 h-4" />
+            {showBuildMenu ? 'Close Build' : 'Build'}
+          </button>
         </div>
-      </div>
 
-      {/* Objectives */}
-      <div className="w-full max-w-4xl flex flex-col gap-2 bg-black/60 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl">
-          <div className="flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-amber-300" />
-              <h3 className="text-lg font-bold">Objectives</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {objectives.map((obj) => {
-                  const progress = objectiveProgress(obj);
-                  const label = objectiveProgressLabel(obj);
-                  const complete = obj.complete;
-                  const claimed = obj.claimed;
-                  return (
-                      <div key={obj.id} className={`p-3 rounded-xl border ${complete ? 'border-green-400/40 bg-green-900/20' : 'border-white/10 bg-white/5'} shadow-inner`}>
-                          <div className="flex justify-between items-start">
-                              <div>
-                                  <div className="font-bold">{obj.title}</div>
-                                  <div className="text-xs text-gray-300">{obj.description}</div>
-                              </div>
-                              {complete ? <CheckCircle2 className="w-5 h-5 text-green-300" /> : null}
-                          </div>
-                          <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
-                              <div className={`h-full ${complete ? 'bg-green-400' : 'bg-blue-400'}`} style={{ width: `${progress * 100}%` }} />
-                          </div>
-                          <div className="text-[11px] text-gray-300 mt-1">Progress: {label}</div>
-                          <div className="flex items-center justify-between mt-2">
-                              <div className="flex items-center gap-1 text-xs text-amber-200">
-                                  <Gift className="w-3 h-3" />
-                                  {Object.entries(obj.reward).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
-                              </div>
-                              {complete && !claimed && (
-                                  <button
-                                    onClick={() => claimObjective(obj.id)}
-                                    className="px-3 py-1 rounded-lg bg-green-600/60 hover:bg-green-600 text-sm font-semibold"
-                                  >
-                                    Claim
-                                  </button>
-                              )}
-                              {claimed && <span className="text-green-300 text-xs">Claimed</span>}
-                          </div>
-                      </div>
-                  );
+        {showBuildMenu && (
+          <div className="pointer-events-auto mx-auto w-full max-w-5xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl">
+            {isBuilding && selectedBuilding && (
+              <div className="mb-3 bg-yellow-500/15 border border-yellow-400/40 text-yellow-100 px-4 py-2 rounded-lg text-sm font-semibold">
+                Placing {selectedBuilding}... tap ground to confirm.
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[320px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20">
+              {(Object.keys(BUILDING_COSTS) as BuildingType[]).map((type) => {
+                const costs = BUILDING_COSTS[type];
+                const perks = buildBenefits[type] || [];
+                const isSelected = selectedBuilding === type;
+                const canAfford = (Object.keys(costs) as ResourceType[]).every(
+                  (r) => resources[r] >= (costs[r] || 0)
+                );
+                return (
+                  <button
+                    key={type}
+                    onClick={() => handleBuildSelect(type)}
+                    disabled={!canAfford}
+                    className={`
+                      text-left flex flex-col gap-2 p-3 rounded-xl transition-all duration-200 border
+                      ${isSelected ? 'bg-yellow-600/20 border-yellow-400/60 ring-2 ring-yellow-400/70 text-white' : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-200'}
+                      ${!canAfford ? 'opacity-50 cursor-not-allowed grayscale' : 'active:scale-95'}
+                    `}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="capitalize font-bold text-base">{type.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-white/10 border border-white/10">
+                        {canAfford ? 'Build' : 'Need resources'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-200">
+                      {Object.entries(costs).map(([res, amount]) => (
+                        <span key={res} className={`px-2 py-1 rounded-full border ${resources[res as ResourceType] < (amount as number) ? 'border-red-400/60 text-red-200' : 'border-white/20 text-white'}`}>
+                          {amount as number} {res}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-1 text-xs text-gray-300">
+                      {perks.length ? perks.map((p, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white/40 mt-1" />
+                          <span>{p}</span>
+                        </div>
+                      )) : <span className="text-gray-400">No special benefits.</span>}
+                    </div>
+                  </button>
+                );
               })}
+            </div>
           </div>
+        )}
+
+        {/* Objectives */}
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/60 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-300" />
+            <h3 className="text-lg font-bold">Objectives</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            {objectives.map((obj) => {
+              const progress = objectiveProgress(obj);
+              const label = objectiveProgressLabel(obj);
+              const complete = obj.complete;
+              const claimed = obj.claimed;
+              return (
+                <div key={obj.id} className={`p-3 rounded-xl border ${complete ? 'border-green-400/40 bg-green-900/20' : 'border-white/10 bg-white/5'} shadow-inner`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-bold">{obj.title}</div>
+                      <div className="text-xs text-gray-300">{obj.description}</div>
+                    </div>
+                    {complete ? <CheckCircle2 className="w-5 h-5 text-green-300" /> : null}
+                  </div>
+                  <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className={`h-full ${complete ? 'bg-green-400' : 'bg-blue-400'}`} style={{ width: `${progress * 100}%` }} />
+                  </div>
+                  <div className="text-[11px] text-gray-300 mt-1">Progress: {label}</div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-1 text-xs text-amber-200">
+                      <Gift className="w-3 h-3" />
+                      {Object.entries(obj.reward).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
+                    </div>
+                    {complete && !claimed && (
+                      <button
+                        onClick={() => claimObjective(obj.id)}
+                        className="px-3 py-1 rounded-lg bg-green-600/60 hover:bg-green-600 text-sm font-semibold"
+                      >
+                        Claim
+                      </button>
+                    )}
+                    {claimed && <span className="text-green-300 text-xs">Claimed</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
