@@ -8,11 +8,21 @@ const __dirname = path.dirname(__filename)
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: "/HomeSteadHaven/",
+  base: "./",
   plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'three', '@react-three/fiber', '@react-three/drei'],
+          game: ['zustand', 'lucide-react', '@react-three/postprocessing']
+        }
+      }
+    }
+  }
 })

@@ -16,7 +16,7 @@
     "@radix-ui/react-slot": "^1.0.2",
     "@react-three/drei": "^9.99.0",
     "@react-three/fiber": "^8.15.16",
-    "@react-three/postprocessing": "^3.0.4",
+    "@react-three/postprocessing": "^2.16.3",
     "@types/three": "^0.161.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",

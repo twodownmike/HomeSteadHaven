@@ -17,7 +17,12 @@ function App() {
         dpr={[1, 2]} // Handle high pixel density screens (mobile)
         gl={{ antialias: false }} // Disable default antialias for post-processing performance
       >
-        <Suspense fallback={null}>
+        <Suspense fallback={
+          <mesh position={[0, 0, 0]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color="orange" wireframe />
+          </mesh>
+        }>
           <GameEnvironment />
           
           <Scene />
@@ -33,7 +38,7 @@ function App() {
 
           <EffectComposer>
             <Bloom luminanceThreshold={1} mipmapBlur intensity={0.5} />
-            <TiltShift target={[0, 0, 0]} />
+            <TiltShift />
             <Vignette eskil={false} offset={0.1} darkness={0.5} />
           </EffectComposer>
         </Suspense>
