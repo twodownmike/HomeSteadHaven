@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -18,9 +18,10 @@ export const useGameStore = create<GameState>()(
       settlers: [
           { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
           { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
-      ], 
+      ] as Settler[],
+ 
       happiness: 100,
-      buildings: [],
+      buildings: [] as Building[],
       nature: (() => {
         // Initial nature generation
         const items = [];
@@ -35,11 +36,11 @@ export const useGameStore = create<GameState>()(
         }
         return items;
       })(),
-      logs: [],
+      logs: [] as LogEntry[],
       weather: 'sunny' as WeatherType,
       season: 'spring' as Season,
-      selectedBuilding: null,
-      selectedBuildingId: null,
+      selectedBuilding: null as BuildingType | null,
+      selectedBuildingId: null as string | null,
       isBuilding: false,
       tickRate: 1000,
       day: 1,
@@ -309,9 +310,7 @@ export const useGameStore = create<GameState>()(
 
           // Weather Change (1% chance)
           if (Math.random() < 0.01) {
-              const types: WeatherType[] = ['sunny', 'rain', 'snow'];
-              // Simple weighted probability or just random
-              // Let's bias slightly towards sunny
+              // Simple weighted probability; bias slightly towards sunny
               const r = Math.random();
               if (r < 0.6) newWeather = 'sunny';
               else if (r < 0.85) newWeather = 'rain';
@@ -572,9 +571,9 @@ export const useGameStore = create<GameState>()(
             settlers: [
                 { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
                 { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
-            ],
+            ] as Settler[],
             happiness: 100,
-            buildings: [],
+            buildings: [] as Building[],
             nature: items,
             logs: [],
             weather: 'sunny' as WeatherType,

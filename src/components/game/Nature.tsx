@@ -92,6 +92,12 @@ export const Rock: React.FC<RockProps> = ({ id, position, scale = 1 }) => {
     const [lastGathered, setLastGathered] = useState(0);
     const [clicks, setClicks] = useState(0);
 
+    const getRockColor = () => {
+        if (season === 'winter') return hovered ? "#cbd5e1" : "#e2e8f0";
+        if (season === 'autumn') return hovered ? "#b0a18f" : "#8b7c6a";
+        return hovered ? "#9ca3af" : "#6b7280";
+    };
+
     const handleClick = (e: any) => {
         e.stopPropagation();
         addResource('stone', 5);

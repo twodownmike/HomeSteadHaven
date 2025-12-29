@@ -17,7 +17,7 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
     // However, since we are doing 60fps React renders for the game loop, direct prop update might be "okay" for low count.
     // Optimization: Store updates at lower tick rate, visual interpolation here.
     
-    useFrame((state, delta) => {
+    useFrame((state) => {
         if (meshRef.current) {
             // Simple bobbing animation
             meshRef.current.position.y = Math.sin(state.clock.elapsedTime * 5) * 0.1;
