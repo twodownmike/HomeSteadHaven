@@ -7,11 +7,26 @@
     <title>Homestead Survival</title>
     <style>
       body { background-color: #0f172a; color: white; margin: 0; font-family: sans-serif; }
+      #error-container { position: fixed; top: 0; left: 0; width: 100%; background: rgba(255,0,0,0.9); color: white; padding: 20px; z-index: 9999; display: none; }
     </style>
-    <script type="module" crossorigin src="/HomeSteadHaven/assets/index-CnGTSgGd.js"></script>
-    <link rel="stylesheet" crossorigin href="/HomeSteadHaven/assets/index-C8OJrV3Y.css">
+    <script type="module" crossorigin src="/HomeSteadHaven/assets/index-EEej7Yrq.js"></script>
+    <link rel="stylesheet" crossorigin href="/HomeSteadHaven/assets/index-DybXjysr.css">
   </head>
   <body>
+    <div id="error-container"></div>
+    <script>
+      window.onerror = function(msg, url, line, col, error) {
+        var container = document.getElementById('error-container');
+        container.style.display = 'block';
+        container.innerHTML += '<div>Error: ' + msg + ' at ' + url + ':' + line + ':' + col + '</div>';
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(event) {
+        var container = document.getElementById('error-container');
+        container.style.display = 'block';
+        container.innerHTML += '<div>Unhandled Rejection: ' + event.reason + '</div>';
+      });
+    </script>
     <div id="root">
       <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; gap: 1rem;">
         <div>Loading Homestead Survival...</div>
