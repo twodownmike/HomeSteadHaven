@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -31,10 +31,24 @@ export const useGameStore = create<GameState>()(
         }
         return items;
       })(),
+      logs: [],
       selectedBuilding: null,
       selectedBuildingId: null,
       isBuilding: false,
       day: 1,
+
+      addLog: (message: string, type: LogEntry['type'] = 'info') => {
+          set((state) => {
+              const newLog: LogEntry = {
+                  id: generateId(),
+                  message,
+                  timestamp: Date.now(),
+                  type
+              };
+              // Keep only last 20 logs
+              return { logs: [newLog, ...state.logs].slice(0, 20) };
+          });
+      },
 
       addResource: (type: ResourceType, amount: number) =>
         set((state) => ({
@@ -58,10 +72,16 @@ export const useGameStore = create<GameState>()(
         return false;
       },
 
-      removeNature: (id: string) => 
-        set((state) => ({
-            nature: state.nature.filter((item) => item.id !== id)
-        })),
+      removeNature: (id: string) => {
+        const state = get();
+        const item = state.nature.find(n => n.id === id);
+        if (item) {
+            state.addLog(`Cleared ${item.type}`, 'info');
+            set((state) => ({
+                nature: state.nature.filter((item) => item.id !== id)
+            }));
+        }
+      },
 
       addBuilding: (type: BuildingType, position: [number, number, number]) => {
         const state = get();
@@ -82,6 +102,7 @@ export const useGameStore = create<GameState>()(
         );
 
         if (buildingCollision || natureCollision) {
+            state.addLog('Cannot build here!', 'warning');
             return; // Failed to build
         }
 
@@ -96,12 +117,19 @@ export const useGameStore = create<GameState>()(
           }
         });
 
+        if (!canAfford) {
+            state.addLog('Not enough resources!', 'warning');
+            return;
+        }
+
         // Check if has enough workers (if workers required)
         if (stats.workers) {
             // Calculate current employed
             const employed = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].workers || 0), 0);
             if (state.population - employed < stats.workers) {
                 canAfford = false;
+                state.addLog('Not enough workers!', 'warning');
+                return;
             }
         }
 
@@ -126,9 +154,11 @@ export const useGameStore = create<GameState>()(
             isBuilding: false,
             selectedBuilding: null,
           }));
+          
+          state.addLog(`Built ${type}!`, 'success');
         }
       },
-
+      
       upgradeBuilding: (id: string) => {
         const state = get();
         const building = state.buildings.find(b => b.id === id);
@@ -157,15 +187,22 @@ export const useGameStore = create<GameState>()(
                      b.id === id ? { ...b, level: b.level + 1 } : b
                  )
              }));
+             state.addLog(`Upgraded ${building.type} to level ${building.level + 1}`, 'success');
+        } else {
+            state.addLog('Not enough resources to upgrade!', 'warning');
         }
       },
 
       demolishBuilding: (id: string) => {
-          set((state) => ({
-              buildings: state.buildings.filter(b => b.id !== id),
-              selectedBuildingId: null
-          }));
-          // Optional: Refund some resources? For now, no refunds (hardcore mode!)
+          const state = get();
+          const building = state.buildings.find(b => b.id === id);
+          if (building) {
+            state.addLog(`Demolished ${building.type}`, 'danger');
+            set((state) => ({
+                buildings: state.buildings.filter(b => b.id !== id),
+                selectedBuildingId: null
+            }));
+          }
       },
 
       setSelectedBuilding: (type: BuildingType | null) =>
@@ -218,18 +255,28 @@ export const useGameStore = create<GameState>()(
                 }
             });
           } else {
-             // Starvation: No production, food stays at 0
+             // Starvation
              newResources.food = 0;
-             // Chance to die if starving
              if (Math.random() < 0.1 && newPopulation > 1) {
                  newPopulation -= 1;
              }
+          }
+          
+          // Let's handle log updates for population changes here manually by appending to logs
+          let newLogs = [...state.logs];
+          if (newPopulation > state.population) {
+              const log: LogEntry = { id: generateId(), message: "A new settler arrived!", timestamp: Date.now(), type: 'success' as LogEntry['type'] };
+              newLogs = [log, ...newLogs].slice(0, 20);
+          } else if (newPopulation < state.population) {
+              const log: LogEntry = { id: generateId(), message: "A settler died from starvation!", timestamp: Date.now(), type: 'danger' as LogEntry['type'] };
+              newLogs = [log, ...newLogs].slice(0, 20);
           }
 
           return {
             resources: newResources,
             population: newPopulation,
-            day: state.day + 0.005 // Increment day slowly (slower than before for day/night cycle)
+            day: state.day + 0.005,
+            logs: newLogs
           };
         });
       },
@@ -257,6 +304,7 @@ export const useGameStore = create<GameState>()(
             population: 2,
             buildings: [],
             nature: items,
+            logs: [],
             selectedBuilding: null,
             selectedBuildingId: null,
             isBuilding: false,
@@ -271,6 +319,7 @@ export const useGameStore = create<GameState>()(
         population: state.population,
         buildings: state.buildings, 
         nature: state.nature,
+        logs: state.logs,
         day: state.day 
       }), // only persist these fields
     }

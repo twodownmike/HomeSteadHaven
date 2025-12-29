@@ -26,11 +26,19 @@ export interface NatureItem {
   scale: number;
 }
 
+export interface LogEntry {
+  id: string;
+  message: string;
+  timestamp: number;
+  type: 'info' | 'success' | 'warning' | 'danger';
+}
+
 export interface GameState {
   resources: Resources;
   population: number;
   buildings: Building[];
   nature: NatureItem[];
+  logs: LogEntry[];
   selectedBuilding: BuildingType | null; // For placement
   selectedBuildingId: string | null; // For inspecting existing building
   isBuilding: boolean;
@@ -43,6 +51,7 @@ export interface GameState {
   upgradeBuilding: (id: string) => void;
   demolishBuilding: (id: string) => void;
   removeNature: (id: string) => void;
+  addLog: (message: string, type?: LogEntry['type']) => void;
   setSelectedBuilding: (type: BuildingType | null) => void;
   selectBuildingId: (id: string | null) => void;
   tick: () => void;

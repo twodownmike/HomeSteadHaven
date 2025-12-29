@@ -25,7 +25,8 @@ export const GameUI: React.FC = () => {
     selectedBuildingId,
     selectBuildingId,
     upgradeBuilding,
-    demolishBuilding
+    demolishBuilding,
+    logs
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -110,6 +111,24 @@ export const GameUI: React.FC = () => {
               </div>
           </div>
       )}
+
+      {/* Event Logs */}
+      <div className="absolute bottom-32 left-4 flex flex-col gap-2 w-[300px] pointer-events-none opacity-80">
+          {logs.slice(0, 5).map((log) => (
+              <div 
+                key={log.id}
+                className={`
+                    p-2 rounded-lg text-sm font-medium backdrop-blur-md shadow-lg border border-white/5 animate-in slide-in-from-left-4 fade-in duration-300
+                    ${log.type === 'success' ? 'bg-green-900/60 text-green-100' : 
+                      log.type === 'warning' ? 'bg-yellow-900/60 text-yellow-100' :
+                      log.type === 'danger' ? 'bg-red-900/60 text-red-100' :
+                      'bg-gray-900/60 text-gray-100'}
+                `}
+              >
+                  {log.message}
+              </div>
+          ))}
+      </div>
 
       {/* Building Inspection Panel */}
       {selectedBuildingData && (
