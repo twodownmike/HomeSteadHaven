@@ -1,0 +1,590 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season } from './types';
+
+// Simple ID generator to avoid extra dependency for now if uuid is not installed, 
+// but I'll use a simple random string for now.
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+export const useGameStore = create<GameState>()(
+  persist(
+    (set, get) => ({
+      resources: {
+        wood: 100,
+        food: 50,
+        stone: 0,
+        iron: 0,
+      },
+      settlers: [
+          { id: 'settler-1', name: 'John', position: [0, 0, 0], targetPosition: null, state: 'idle', actionTimer: 0 },
+          { id: 'settler-2', name: 'Jane', position: [2, 0, 2], targetPosition: null, state: 'idle', actionTimer: 0 },
+      ], 
+      happiness: 100,
+      buildings: [],
+      nature: (() => {
+        // Initial nature generation
+        const items = [];
+        for (let i = 0; i < 40; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 15 + Math.random() * 30; // Outside the immediate center
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const type: NatureType = Math.random() > 0.3 ? 'tree' : 'rock';
+            const scale = 0.8 + Math.random() * 0.5;
+            items.push({ id: `nature-${i}`, position: [x, 0, z] as [number, number, number], type, scale });
+        }
+        return items;
+      })(),
+      logs: [],
+      weather: 'sunny',
+      season: 'spring',
+      selectedBuilding: null,
+      selectedBuildingId: null,
+      isBuilding: false,
+      day: 1,
+
+      addLog: (message: string, type: LogEntry['type'] = 'info') => {
+          set((state) => {
+              const newLog: LogEntry = {
+                  id: generateId(),
+                  message,
+                  timestamp: Date.now(),
+                  type
+              };
+              // Keep only last 20 logs
+              return { logs: [newLog, ...state.logs].slice(0, 20) };
+          });
+      },
+
+      addResource: (type: ResourceType, amount: number) =>
+        set((state) => {
+            const baseStorage = 100;
+            const additionalStorage = state.buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
+            const maxStorage = baseStorage + additionalStorage;
+            
+            const currentAmount = state.resources[type];
+            const newAmount = Math.min(currentAmount + amount, maxStorage);
+            
+            return {
+                resources: {
+                    ...state.resources,
+                    [type]: newAmount,
+                },
+            };
+        }),
+
+      removeResource: (type: ResourceType, amount: number) => {
+        const state = get();
+        if (state.resources[type] >= amount) {
+          set((state) => ({
+            resources: {
+              ...state.resources,
+              [type]: state.resources[type] - amount,
+            },
+          }));
+          return true;
+        }
+        return false;
+      },
+
+      removeNature: (id: string) => {
+        const state = get();
+        const item = state.nature.find(n => n.id === id);
+        if (item) {
+            state.addLog(`Cleared ${item.type}`, 'info');
+            set((state) => ({
+                nature: state.nature.filter((item) => item.id !== id)
+            }));
+        }
+      },
+
+      addBuilding: (type: BuildingType, position: [number, number, number]) => {
+        const state = get();
+        
+        // Validate collision again (server-side validation style)
+        const buildingCollision = state.buildings.some(b => 
+            b.position[0] === position[0] && b.position[2] === position[2]
+        );
+        
+        const minX = position[0] - 0.8;
+        const maxX = position[0] + 0.8;
+        const minZ = position[2] - 0.8;
+        const maxZ = position[2] + 0.8;
+
+        const natureCollision = state.nature.some(n => 
+            n.position[0] > minX && n.position[0] < maxX &&
+            n.position[2] > minZ && n.position[2] < maxZ
+        );
+
+        if (buildingCollision || natureCollision) {
+            state.addLog('Cannot build here!', 'warning');
+            return; // Failed to build
+        }
+
+        const cost = BUILDING_COSTS[type];
+        const stats = BUILDING_STATS[type];
+        
+        // Check if can afford resources
+        let canAfford = true;
+        (Object.keys(cost) as ResourceType[]).forEach((res) => {
+          if ((state.resources[res] || 0) < (cost[res] || 0)) {
+            canAfford = false;
+          }
+        });
+
+        if (!canAfford) {
+            state.addLog('Not enough resources!', 'warning');
+            return;
+        }
+
+        // Check if has enough workers (if workers required)
+        if (stats.workers) {
+            // Calculate current employed
+            const employed = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].workers || 0), 0);
+            if (state.settlers.length - employed < stats.workers) {
+                canAfford = false;
+                state.addLog('Not enough workers!', 'warning');
+                return;
+            }
+        }
+
+        if (canAfford) {
+          // Deduct resources
+          (Object.keys(cost) as ResourceType[]).forEach((res) => {
+            state.removeResource(res, cost[res] || 0);
+          });
+
+          // Add building
+          set((state) => ({
+            buildings: [
+              ...state.buildings,
+              {
+                id: generateId(),
+                type,
+                position,
+                level: 1,
+                lastCollected: Date.now(),
+              },
+            ],
+            isBuilding: false,
+            selectedBuilding: null,
+          }));
+          
+          state.addLog(`Built ${type}!`, 'success');
+        }
+      },
+      
+      upgradeBuilding: (id: string) => {
+        const state = get();
+        const building = state.buildings.find(b => b.id === id);
+        if (!building) return;
+        
+        const baseCost = BUILDING_COSTS[building.type];
+        // Upgrade cost scales with level: base * (level + 1)
+        const multiplier = building.level + 1;
+        
+        let canAfford = true;
+        (Object.keys(baseCost) as ResourceType[]).forEach((res) => {
+             const costAmount = (baseCost[res] || 0) * multiplier;
+             if ((state.resources[res] || 0) < costAmount) {
+                 canAfford = false;
+             }
+        });
+        
+        if (canAfford) {
+             (Object.keys(baseCost) as ResourceType[]).forEach((res) => {
+                 const costAmount = (baseCost[res] || 0) * multiplier;
+                 state.removeResource(res, costAmount);
+             });
+             
+             set((state) => ({
+                 buildings: state.buildings.map(b => 
+                     b.id === id ? { ...b, level: b.level + 1 } : b
+                 )
+             }));
+             state.addLog(`Upgraded ${building.type} to level ${building.level + 1}`, 'success');
+        } else {
+            state.addLog('Not enough resources to upgrade!', 'warning');
+        }
+      },
+
+      demolishBuilding: (id: string) => {
+          const state = get();
+          const building = state.buildings.find(b => b.id === id);
+          if (building) {
+            state.addLog(`Demolished ${building.type}`, 'danger');
+            
+            // Unassign workers
+            const newSettlers = state.settlers.map(s => 
+                s.job === id ? { ...s, job: undefined, state: 'idle' as const } : 
+                s.home === id ? { ...s, home: undefined } : s
+            );
+
+            set((state) => ({
+                buildings: state.buildings.filter(b => b.id !== id),
+                settlers: newSettlers,
+                selectedBuildingId: null
+            }));
+          }
+      },
+
+      assignWorker: (buildingId: string) => {
+          const state = get();
+          const building = state.buildings.find(b => b.id === buildingId);
+          if (!building) return;
+
+          const stats = BUILDING_STATS[building.type];
+          if (!stats.workers) {
+              state.addLog(`${building.type} does not require workers.`, 'warning');
+              return;
+          }
+
+          const currentWorkers = state.settlers.filter(s => s.job === buildingId).length;
+          if (currentWorkers >= (stats.workers || 0)) {
+              state.addLog(`${building.type} is fully staffed.`, 'warning');
+              return;
+          }
+
+          // Find unemployed settler
+          const unemployed = state.settlers.find(s => !s.job);
+          if (unemployed) {
+              set((state) => ({
+                  settlers: state.settlers.map(s => 
+                      s.id === unemployed.id ? { ...s, job: buildingId } : s
+                  )
+              }));
+              state.addLog(`${unemployed.name} assigned to ${building.type}.`, 'success');
+          } else {
+              state.addLog('No unemployed settlers available.', 'warning');
+          }
+      },
+
+      unassignWorker: (buildingId: string) => {
+          const state = get();
+          // Find a worker at this building
+          const worker = state.settlers.find(s => s.job === buildingId);
+          if (worker) {
+              set((state) => ({
+                  settlers: state.settlers.map(s => 
+                      s.id === worker.id ? { ...s, job: undefined, state: 'idle' } : s
+                  )
+              }));
+              state.addLog(`${worker.name} unassigned from job.`, 'info');
+          }
+      },
+
+      setSelectedBuilding: (type: BuildingType | null) =>
+        set({ selectedBuilding: type, isBuilding: !!type, selectedBuildingId: null }),
+
+// ... (rest of the code remains the same)
+      selectBuildingId: (id: string | null) =>
+        set({ selectedBuildingId: id, selectedBuilding: null, isBuilding: false }),
+
+      tick: () => {
+        set((state) => {
+          const newResources = { ...state.resources };
+          let newSettlers = [...state.settlers];
+          let newWeather = state.weather;
+          let newSeason = state.season;
+          let newLogs = [...state.logs];
+
+          // Determine Season based on Day
+          // Let's say a season is 10 days for gameplay pacing
+          const seasonLength = 10;
+          const cycle = Math.floor(state.day / seasonLength) % 4;
+          const seasons: Season[] = ['spring', 'summer', 'autumn', 'winter'];
+          
+          if (seasons[cycle] !== state.season) {
+              newSeason = seasons[cycle];
+              const log: LogEntry = { id: generateId(), message: `Season changed to ${newSeason}!`, timestamp: Date.now(), type: 'info' };
+              newLogs = [log, ...newLogs].slice(0, 20);
+          }
+
+          // Weather Change (1% chance)
+          if (Math.random() < 0.01) {
+              const types: WeatherType[] = ['sunny', 'rain', 'snow'];
+              // Simple weighted probability or just random
+              // Let's bias slightly towards sunny
+              const r = Math.random();
+              if (r < 0.6) newWeather = 'sunny';
+              else if (r < 0.85) newWeather = 'rain';
+              else newWeather = 'snow';
+
+              if (newWeather !== state.weather) {
+                  const log: LogEntry = { id: generateId(), message: `Weather changed to ${newWeather}!`, timestamp: Date.now(), type: 'info' };
+                  newLogs = [log, ...newLogs].slice(0, 20);
+              }
+          }
+          
+          // Calculate Storage
+          const baseStorage = 100;
+          const additionalStorage = state.buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
+          const maxStorage = baseStorage + additionalStorage;
+          
+          let newHappiness = state.happiness;
+
+          // Survival Mechanic: Food Consumption
+          // Base consumption + cost per building (workers)
+          const consumption = 0.5 + (newSettlers.length * 0.5); // 0.5 food per person
+          
+          if (newResources.food >= consumption) {
+            newResources.food -= consumption;
+            
+            // Food is good for happiness
+            if (newHappiness < 100) newHappiness += 0.5;
+
+            // Growth: If food is abundant (> 2x consumption) and housing available and happiness is high, chance to grow
+            if (newResources.food > consumption * 2 && newHappiness > 80 && newSettlers.length < state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].housing || 0), 2)) {
+                if (Math.random() < 0.05) { // 5% chance per tick to grow
+                    const names = ['James', 'Mary', 'Robert', 'Patricia', 'John', 'Jennifer', 'Michael', 'Linda', 'David', 'Elizabeth'];
+                    const name = names[Math.floor(Math.random() * names.length)];
+                    newSettlers.push({
+                        id: generateId(),
+                        name,
+                        position: [0, 0, 0], // Spawn at center
+                        targetPosition: null,
+                        state: 'idle',
+                        actionTimer: 0
+                    });
+                    
+                    const log: LogEntry = { id: generateId(), message: `${name} arrived!`, timestamp: Date.now(), type: 'success' };
+                    newLogs = [log, ...newLogs].slice(0, 20);
+                }
+            }
+
+            // Calculate production from buildings (only if fed and staffed)
+            // For simplicity, we assume if we are fed, we work. 
+            // Check if we have enough workers for ALL buildings?
+            // Or just reduce production proportional to missing workers?
+            
+            // Happiness affects efficiency!
+            const happinessFactor = newHappiness / 100;
+            
+            state.buildings.forEach((building) => {
+                const stats = BUILDING_STATS[building.type];
+                
+                // If building needs workers, check if it has them
+                let workerEfficiency = 1;
+                if (stats.workers) {
+                    const assigned = newSettlers.filter(s => s.job === building.id).length;
+                    workerEfficiency = assigned / stats.workers;
+                }
+                
+                const efficiency = workerEfficiency * happinessFactor;
+                
+                const production = RESOURCE_GENERATION[building.type];
+                if (production && efficiency > 0) {
+                (Object.keys(production) as ResourceType[]).forEach((res) => {
+                    // Apply efficiency based on workforce
+                    // Also scale by building level
+                    let amount = (production[res] || 0) * efficiency * building.level;
+                    
+                    // Apply Weather Modifiers
+                    if (newSeason === 'winter') {
+                        if (res === 'food') amount *= 0.2; // Winter is hard for farming
+                    }
+                    if (newSeason === 'autumn') {
+                         if (res === 'food') amount *= 1.5; // Harvest season
+                    }
+
+                    // Cap at maxStorage
+                    newResources[res] = Math.min(newResources[res] + amount, maxStorage);
+                });
+                }
+            });
+          } else {
+             // Starvation
+             newResources.food = 0;
+             newHappiness = Math.max(0, newHappiness - 10); // Major happiness hit
+             
+             if (Math.random() < 0.1 && newSettlers.length > 1) {
+                 const victimIndex = Math.floor(Math.random() * newSettlers.length);
+                 const victim = newSettlers[victimIndex];
+                 newSettlers.splice(victimIndex, 1);
+                 
+                 const log: LogEntry = { id: generateId(), message: `${victim.name} died from starvation!`, timestamp: Date.now(), type: 'danger' };
+                 newLogs = [log, ...newLogs].slice(0, 20);
+             }
+          }
+          
+          // Housing Check for Happiness
+          const totalHousing = 2 + state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].housing || 0), 0);
+          if (newSettlers.length > totalHousing) {
+              newHappiness = Math.max(0, newHappiness - 2); // Overcrowding / Homelessness
+          }
+          
+          // Weather/Season Happiness Effects
+          if (newWeather === 'rain' || newWeather === 'snow') {
+               newHappiness = Math.max(0, newHappiness - 0.1); // Gloomy weather
+          }
+          
+          // Cap Happiness
+          newHappiness = Math.min(100, Math.max(0, newHappiness));
+          
+          // Update Settler Logic (Movement/AI)
+          newSettlers = newSettlers.map(settler => {
+              const timeOfDay = state.day % 1;
+              const isNight = timeOfDay > 0.75 || timeOfDay < 0.2;
+              const isWorkTime = timeOfDay > 0.25 && timeOfDay < 0.7;
+
+              // AI State Machine
+              if (settler.job && isWorkTime) {
+                  // Go to work
+                  const workplace = state.buildings.find(b => b.id === settler.job);
+                  if (workplace) {
+                      // If not at workplace, walk there
+                      const dist = Math.sqrt(Math.pow(settler.position[0] - workplace.position[0], 2) + Math.pow(settler.position[2] - workplace.position[2], 2));
+                      if (dist > 2) {
+                          return { 
+                              ...settler, 
+                              state: 'walking', 
+                              targetPosition: workplace.position 
+                          };
+                      } else {
+                          // Working
+                          return { ...settler, state: 'working', targetPosition: null };
+                      }
+                  }
+              }
+              
+              if (isNight) {
+                  // Go home or to campfire (center)
+                  const target = [0, 0, 0] as [number, number, number]; // Center for now, TODO: Home assigment
+                  const dist = Math.sqrt(Math.pow(settler.position[0] - target[0], 2) + Math.pow(settler.position[2] - target[2], 2));
+                  if (dist > 2) {
+                       return { ...settler, state: 'walking', targetPosition: target };
+
+            // Simple Random Walk AI if idle/wandering
+            if (settler.state === 'idle' || (settler.state === 'working' && !isWorkTime) || (settler.state === 'resting' && !isNight)) {
+                if (Math.random() < 0.02) {
+                     // Pick a random target within a range
+                     const angle = Math.random() * Math.PI * 2;
+                     const dist = 3 + Math.random() * 8;
+                     const tx = Math.cos(angle) * dist; // Wander around center
+                     const tz = Math.sin(angle) * dist;
+                     return { ...settler, state: 'walking', targetPosition: [tx, 0, tz] };
+                }
+                // Reset state to idle if was working/resting but shouldn't be
+                return { ...settler, state: 'idle' };
+            } 
+            
+            // Movement Logic
+            if (settler.state === 'walking' && settler.targetPosition) {
+                // Move towards target
+                const dx = settler.targetPosition[0] - settler.position[0];
+                const dz = settler.targetPosition[2] - settler.position[2];
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                const speed = 0.08; // Slightly faster
+                
+                if (dist < speed) {
+                    return { ...settler, position: settler.targetPosition, targetPosition: null, state: 'idle' };
+                } else {
+                    return { 
+                        ...settler, 
+                        position: [
+                            settler.position[0] + (dx / dist) * speed,
+                            0,
+                            settler.position[2] + (dz / dist) * speed
+                        ] as [number, number, number]
+                    };
+                }
+            }
+            return settler;
+        });
+                       const tx = Math.cos(angle) * dist; // Wander around center
+                       const tz = Math.sin(angle) * dist;
+                       return { ...settler, state: 'walking', targetPosition: [tx, 0, tz] };
+                  }
+                  // Reset state to idle if was working/resting but shouldn't be
+                  return { ...settler, state: 'idle' };
+              } 
+              
+              // Movement Logic
+              if (settler.state === 'walking' && settler.targetPosition) {
+                  // Move towards target
+                  const dx = settler.targetPosition[0] - settler.position[0];
+                  const dz = settler.targetPosition[2] - settler.position[2];
+                  const dist = Math.sqrt(dx * dx + dz * dz);
+                  const speed = 0.08; // Slightly faster
+                  
+                  if (dist < speed) {
+                      return { ...settler, position: settler.targetPosition, targetPosition: null, state: 'idle' };
+                  } else {
+                      return { 
+                          ...settler, 
+                          position: [
+                              settler.position[0] + (dx / dist) * speed,
+                              0,
+                              settler.position[2] + (dz / dist) * speed
+                          ] as [number, number, number]
+                      };
+                  }
+              }
+              return settler;
+          });
+
+          return {
+            resources: newResources,
+            settlers: newSettlers,
+            happiness: newHappiness,
+            weather: newWeather,
+            season: newSeason,
+            day: state.day + 0.005,
+            logs: newLogs
+          };
+        });
+      },
+
+      reset: () => {
+        // Regenerate nature on reset
+        const items = [];
+        for (let i = 0; i < 40; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 15 + Math.random() * 30;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const type: NatureType = Math.random() > 0.3 ? 'tree' : 'rock';
+            const scale = 0.8 + Math.random() * 0.5;
+            items.push({ id: `nature-${i}`, position: [x, 0, z] as [number, number, number], type, scale });
+        }
+
+        set({
+            resources: {
+                wood: 100,
+                food: 50,
+                stone: 0,
+                iron: 0,
+            },
+            settlers: [
+                { id: 'settler-1', name: 'John', position: [0, 0, 0], targetPosition: null, state: 'idle', actionTimer: 0 },
+                { id: 'settler-2', name: 'Jane', position: [2, 0, 2], targetPosition: null, state: 'idle', actionTimer: 0 },
+            ],
+            happiness: 100,
+            buildings: [],
+            nature: items,
+            logs: [],
+            weather: 'sunny',
+            season: 'spring',
+            selectedBuilding: null,
+            selectedBuildingId: null,
+            isBuilding: false,
+            day: 1,
+        });
+      },
+    }),
+    {
+      name: 'homestead-storage', // name of the item in the storage (must be unique)
+      partialize: (state) => ({ 
+        resources: state.resources, 
+        settlers: state.settlers,
+        happiness: state.happiness,
+        buildings: state.buildings, 
+        nature: state.nature,
+        logs: state.logs,
+        weather: state.weather,
+        season: state.season,
+        day: state.day 
+      }), // only persist these fields
+    }
+  )
+);
