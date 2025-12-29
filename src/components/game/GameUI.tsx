@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store';
-import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut } from 'lucide-react';
+import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE } from '../../types';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
@@ -42,10 +42,16 @@ export const GameUI: React.FC = () => {
     assignWorker,
     unassignWorker,
     loadSaveData,
+    unlockedResearch,
+    currentResearch,
+    researchProgress,
+    startResearch,
+    cancelResearch,
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
   const [showBuildMenu, setShowBuildMenu] = useState(false);
   const [showObjectives, setShowObjectives] = useState(false);
+  const [showResearch, setShowResearch] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
@@ -70,6 +76,7 @@ export const GameUI: React.FC = () => {
   const upgradeMultiplier = selectedBuildingData ? selectedBuildingData.level + 1 : 1;
   const selectedStats = selectedBuildingData ? BUILDING_STATS[selectedBuildingData.type] : null;
   const assignedWorkers = selectedBuildingData ? settlers.filter(s => s.job === selectedBuildingData.id).length : 0;
+  const barn = buildings.find(b => b.type === 'barn');
 
   const canAffordUpgrade = upgradeCost && Object.keys(upgradeCost).every(res => {
       const type = res as ResourceType;
@@ -78,6 +85,9 @@ export const GameUI: React.FC = () => {
 
   const canFestival = resources.wood >= 30 && resources.food >= 40;
   const canExpedition = resources.food >= 25 && resources.wood >= 15;
+  const avgHunger = settlers.length ? Math.round(settlers.reduce((a,s)=>a+s.hunger,0)/settlers.length) : 100;
+  const avgEnergy = settlers.length ? Math.round(settlers.reduce((a,s)=>a+s.energy,0)/settlers.length) : 100;
+  const lowNeeds = settlers.filter(s => s.hunger < 30 || s.energy < 30).length;
 
   const objectiveProgress = (obj: Objective) => {
       const { goal } = obj;
@@ -161,6 +171,9 @@ export const GameUI: React.FC = () => {
       season,
       day,
       objectives,
+      unlockedResearch,
+      currentResearch,
+      researchProgress,
     });
     setIsSaving(false);
   };
@@ -239,6 +252,11 @@ export const GameUI: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 justify-end">
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[140px]">
+              <div className="text-xs uppercase opacity-70 font-bold tracking-wider">Needs</div>
+              <div className="text-sm">Hunger {avgHunger}% · Energy {avgEnergy}%</div>
+              {lowNeeds > 0 && <div className="text-xs text-yellow-200 mt-1">{lowNeeds} settlers need care</div>}
+            </div>
             <button
               onClick={celebrateFestival}
               disabled={!canFestival}
@@ -260,6 +278,13 @@ export const GameUI: React.FC = () => {
               className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${showObjectives ? 'bg-emerald-600/30 border-emerald-400 text-emerald-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
             >
               Objectives
+            </button>
+            <button 
+              onClick={() => setShowResearch((v) => !v)}
+              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 ${showResearch ? 'bg-cyan-600/30 border-cyan-400 text-cyan-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
+            >
+              <Brain className="w-4 h-4" />
+              Research
             </button>
             <button
               onClick={handleSave}
@@ -324,6 +349,74 @@ export const GameUI: React.FC = () => {
           </button>
           <div className="text-xs text-gray-400 mt-2">
               v0.2.0 Beta
+          </div>
+        </div>
+      )}
+
+      {/* Research Panel */}
+      {showResearch && (
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/85 backdrop-blur-md p-4 rounded-2xl border border-cyan-400/30 text-white shadow-2xl mx-auto mt-2 sm:mt-4">
+          <div className="flex items-center gap-2">
+            <Brain className="w-5 h-5 text-cyan-300" />
+            <h3 className="text-lg font-bold">Research</h3>
+            {currentResearch && <span className="text-xs text-cyan-200">In progress…</span>}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            {RESEARCH_TREE.map((topic) => {
+              const unlocked = unlockedResearch.includes(topic.id);
+              const inProgress = currentResearch === topic.id;
+              const barnReqMet = (barn?.level || 0) >= topic.barnLevelReq;
+              const canAfford = (Object.keys(topic.cost) as ResourceType[]).every(
+                (r) => resources[r] >= (topic.cost[r] || 0)
+              );
+              const disabled = unlocked || inProgress || !barnReqMet || !canAfford;
+              return (
+                <div key={topic.id} className={`p-3 rounded-xl border ${unlocked ? 'border-green-400/40 bg-green-900/10' : 'border-white/10 bg-white/5'} flex flex-col gap-2`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold">{topic.name}</div>
+                      <div className="text-xs text-gray-300">{topic.description}</div>
+                    </div>
+                    {unlocked && <CheckCircle2 className="w-5 h-5 text-green-300" />}
+                  </div>
+                  <div className="text-xs text-gray-200 flex flex-wrap gap-2">
+                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">Barn lvl {topic.barnLevelReq}</span>
+                    {(Object.entries(topic.cost) as [string, number][])
+                      .map(([res, amt]) => (
+                        <span key={res} className={`px-2 py-1 rounded-full border ${resources[res as ResourceType] < amt ? 'border-red-400/60 text-red-200' : 'border-white/20 text-white'}`}>
+                          {amt} {res}
+                        </span>
+                      ))}
+                  </div>
+                  {inProgress && (
+                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-cyan-400" style={{ width: `${Math.min(100, researchProgress * 100)}%` }} />
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300">
+                      {unlocked ? 'Unlocked' : inProgress ? 'Researching…' : barnReqMet ? (canAfford ? 'Ready to research' : 'Need resources') : 'Barn level too low'}
+                    </span>
+                    {inProgress ? (
+                      <button
+                        onClick={cancelResearch}
+                        className="text-xs px-3 py-1 rounded-lg border border-cyan-400 text-cyan-100 hover:bg-cyan-500/20"
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => startResearch(topic.id)}
+                        disabled={disabled}
+                        className={`text-xs px-3 py-1 rounded-lg border ${disabled ? 'border-white/10 text-gray-400 opacity-60 cursor-not-allowed' : 'border-cyan-400 text-cyan-100 hover:bg-cyan-500/20'}`}
+                      >
+                        {unlocked ? 'Done' : 'Research'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -32,8 +32,8 @@ export const useGameStore = create<GameState>()(
         iron: 0,
       },
       settlers: [
-          { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
-          { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
+          { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
+          { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
       ] as Settler[],
  
       happiness: 100,
@@ -98,6 +98,9 @@ export const useGameStore = create<GameState>()(
               claimed: false,
           },
       ] as Objective[],
+      unlockedResearch: [] as ResearchId[],
+      currentResearch: null as ResearchId | null,
+      researchProgress: 0,
 
       addLog: (message: string, type: LogEntry['type'] = 'info') => {
           set((state) => {
@@ -172,6 +175,11 @@ export const useGameStore = create<GameState>()(
         const requiredLevel = BARN_LEVEL_REQUIREMENTS[type];
         if (requiredLevel && barn.level < requiredLevel) {
           state.addLog(`Upgrade the Barn to level ${requiredLevel} to unlock ${type}.`, 'warning');
+          return;
+        }
+        const researchReq = BUILDING_RESEARCH_REQ[type];
+        if (researchReq && !state.unlockedResearch.includes(researchReq)) {
+          state.addLog(`Research "${researchReq}" to unlock ${type}.`, 'warning');
           return;
         }
         
@@ -422,10 +430,12 @@ export const useGameStore = create<GameState>()(
                     {
                         id: generateId(),
                         name: `Scout ${state.settlers.length + 1}`,
-                        position: [0, 0, 0],
+                        position: [0, 0, 0] as [number, number, number],
                         targetPosition: null,
-                        state: 'idle',
-                        actionTimer: 0
+                        state: 'idle' as const,
+                        actionTimer: 0,
+                        hunger: 100,
+                        energy: 100,
                     }
                 ] : state.settlers,
             }));
@@ -472,6 +482,53 @@ export const useGameStore = create<GameState>()(
         state.addLog(`Claimed reward: ${objective.title}`, 'success');
       },
 
+      startResearch: (id: ResearchId) => {
+        const state = get();
+        if (state.unlockedResearch.includes(id)) {
+          state.addLog('Research already unlocked.', 'warning');
+          return;
+        }
+        if (state.currentResearch === id) {
+          state.addLog('Research already in progress.', 'info');
+          return;
+        }
+        const topic = RESEARCH_TREE.find((r) => r.id === id);
+        if (!topic) return;
+        const barn = state.buildings.find((b) => b.type === 'barn');
+        if (!barn || barn.level < topic.barnLevelReq) {
+          state.addLog(`Requires Barn level ${topic.barnLevelReq} to research ${topic.name}.`, 'warning');
+          return;
+        }
+        // Check costs
+        const canAfford = (Object.keys(topic.cost) as ResourceType[]).every(
+          (res) => (state.resources[res] || 0) >= (topic.cost[res] || 0)
+        );
+        if (!canAfford) {
+          state.addLog('Not enough resources for research.', 'warning');
+          return;
+        }
+        // Pay costs
+        set((s) => ({
+          resources: {
+            ...s.resources,
+            ...(Object.keys(topic.cost) as ResourceType[]).reduce((acc, res) => {
+              acc[res] = s.resources[res] - (topic.cost[res] || 0);
+              return acc;
+            }, {} as Resources),
+          },
+          currentResearch: id,
+          researchProgress: 0,
+        }));
+        state.addLog(`Started research: ${topic.name}`, 'success');
+      },
+
+      cancelResearch: () => {
+        const state = get();
+        if (!state.currentResearch) return;
+        set({ currentResearch: null, researchProgress: 0 });
+        state.addLog('Research cancelled.', 'info');
+      },
+
       loadSaveData: (data: Partial<GameSaveData>) => {
         const current = get();
         const incomingBuildings = data.buildings || current.buildings;
@@ -489,6 +546,9 @@ export const useGameStore = create<GameState>()(
           season: data.season || current.season,
           day: data.day ?? current.day,
           objectives: data.objectives || current.objectives,
+          unlockedResearch: data.unlockedResearch || current.unlockedResearch,
+          currentResearch: data.currentResearch ?? current.currentResearch,
+          researchProgress: data.researchProgress ?? current.researchProgress,
           selectedBuilding: null,
           selectedBuildingId: null,
           isBuilding: false,
@@ -597,8 +657,76 @@ export const useGameStore = create<GameState>()(
                 ] as [number, number, number],
               };
             }
-            return settler;
+            // Needs adjustments
+            let hunger = Math.max(0, Math.min(100, settler.hunger - 0.1)); // gradual hunger drop
+            let energy = settler.energy;
+
+            if (settler.state === 'working' || settler.state === 'walking') {
+              energy = Math.max(0, energy - 0.2);
+            } else if (settler.state === 'resting') {
+              energy = Math.min(100, energy + 0.6);
+              hunger = Math.max(0, hunger - 0.05);
+            } else {
+              energy = Math.min(100, energy + 0.1);
+            }
+
+            // Slight happiness influence from needs
+            if (hunger < 20) newHappiness = Math.max(0, newHappiness - 0.2);
+            if (energy < 20) newHappiness = Math.max(0, newHappiness - 0.1);
+            if (hunger > 70 && energy > 70) newHappiness = Math.min(100, newHappiness + 0.05);
+
+            return { ...settler, hunger, energy };
           });
+
+          // Research progression
+          if (state.currentResearch) {
+            const topic = RESEARCH_TREE.find((r) => r.id === state.currentResearch);
+            const progressPerTick = 0.01; // 100 ticks to complete
+            const progressed = state.researchProgress + progressPerTick;
+            if (progressed >= 1 && topic) {
+              const researchLog: LogEntry = { id: generateId(), message: `Research completed: ${topic.name}`, timestamp: Date.now(), type: 'success' };
+              newLogs = [researchLog, ...newLogs].slice(0, 20);
+              return {
+                resources: newResources,
+                settlers: newSettlers,
+                happiness: newHappiness,
+                weather: newWeather,
+                season: newSeason,
+                day: newDay,
+                logs: newLogs,
+                tickRate: state.tickRate,
+                buildings: state.buildings,
+                nature: state.nature,
+                selectedBuilding: state.selectedBuilding,
+                selectedBuildingId: state.selectedBuildingId,
+                isBuilding: state.isBuilding,
+                objectives: state.objectives,
+                unlockedResearch: [...new Set([...state.unlockedResearch, state.currentResearch])],
+                currentResearch: null,
+                researchProgress: 0,
+              };
+            } else {
+              return {
+                resources: newResources,
+                settlers: newSettlers,
+                happiness: newHappiness,
+                weather: newWeather,
+                season: newSeason,
+                day: newDay,
+                logs: newLogs,
+                tickRate: state.tickRate,
+                buildings: state.buildings,
+                nature: state.nature,
+                selectedBuilding: state.selectedBuilding,
+                selectedBuildingId: state.selectedBuildingId,
+                isBuilding: state.isBuilding,
+                objectives: state.objectives,
+                unlockedResearch: state.unlockedResearch,
+                currentResearch: state.currentResearch,
+                researchProgress: progressed,
+              };
+            }
+          }
 
           const updatedObjectives = state.objectives.map((o) => {
             if (o.complete) return o;
@@ -630,6 +758,9 @@ export const useGameStore = create<GameState>()(
             selectedBuildingId: state.selectedBuildingId,
             isBuilding: state.isBuilding,
             objectives: updatedObjectives,
+            unlockedResearch: state.unlockedResearch,
+            currentResearch: state.currentResearch,
+            researchProgress: state.researchProgress,
           };
         });
       },
@@ -655,8 +786,8 @@ export const useGameStore = create<GameState>()(
                 iron: 0,
             },
             settlers: [
-                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
-                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
+                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
+                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
             ] as Settler[],
             happiness: 100,
             buildings: [initialBarn] as Building[],
@@ -670,6 +801,9 @@ export const useGameStore = create<GameState>()(
             day: 1,
             tickRate: 1000,
             objectives: get().objectives.map(o => ({ ...o, complete: false, claimed: false })),
+            unlockedResearch: [],
+            currentResearch: null,
+            researchProgress: 0,
         });
       },
     }),
@@ -696,6 +830,9 @@ export const useGameStore = create<GameState>()(
         day: state.day,
         tickRate: state.tickRate,
         objectives: state.objectives,
+        unlockedResearch: state.unlockedResearch,
+        currentResearch: state.currentResearch,
+        researchProgress: state.researchProgress,
       }), // only persist these fields
     }
   )

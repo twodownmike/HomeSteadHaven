@@ -7,7 +7,7 @@ export interface Resources {
   iron: number;
 }
 
-export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery';
+export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery' | 'workshop' | 'infirmary';
 
 export interface Building {
   id: string;
@@ -32,6 +32,8 @@ export interface Settler {
   job?: string; // buildingId
   home?: string; // buildingId
   actionTimer: number; // Time until next state change or action completion
+  hunger: number; // 0-100, lower is hungrier
+  energy: number; // 0-100, lower is tired
 }
 
 export interface NatureItem {
@@ -66,6 +68,16 @@ export interface Objective {
   claimed: boolean;
 }
 
+export type ResearchId = 'toolmaking' | 'herbalism' | 'fishing' | 'fortifications' | 'baking';
+
+export interface ResearchTopic {
+  id: ResearchId;
+  name: string;
+  description: string;
+  cost: Partial<Resources>;
+  barnLevelReq: number;
+}
+
 export interface GameSaveData {
   resources: Resources;
   settlers: Settler[];
@@ -77,6 +89,9 @@ export interface GameSaveData {
   season: Season;
   day: number;
   objectives: Objective[];
+  unlockedResearch: ResearchId[];
+  currentResearch: ResearchId | null;
+  researchProgress: number;
 }
 
 export interface GameState {
@@ -94,6 +109,9 @@ export interface GameState {
   tickRate: number;
   day: number;
   objectives: Objective[];
+  unlockedResearch: ResearchId[];
+  currentResearch: ResearchId | null;
+  researchProgress: number; // 0..1 for current research
   
   // Actions
   addResource: (type: ResourceType, amount: number) => void;
@@ -111,6 +129,8 @@ export interface GameState {
   claimObjective: (id: string) => void;
   celebrateFestival: () => void;
   sendExpedition: () => void;
+  startResearch: (id: ResearchId) => void;
+  cancelResearch: () => void;
   loadSaveData: (data: Partial<GameSaveData>) => void;
   tick: () => void;
   reset: () => void;
@@ -128,6 +148,8 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   campfire: { wood: 30, stone: 5 },
   watchtower: { wood: 80, stone: 30 },
   fishery: { wood: 40, stone: 10 },
+  workshop: { wood: 80, stone: 30, iron: 10 },
+  infirmary: { wood: 70, stone: 50 },
 };
 
 export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number; happiness?: number }> = {
@@ -142,6 +164,8 @@ export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: 
   campfire: { housing: 1, happiness: 1.2 },
   watchtower: { workers: 1, happiness: 0.2 },
   fishery: { workers: 1 },
+  workshop: { workers: 1 },
+  infirmary: { workers: 1, happiness: 0.6 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
@@ -156,4 +180,52 @@ export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
   campfire: { },
   watchtower: { },
   fishery: { food: 6 },
+  workshop: { wood: 1, stone: 1 },
+  infirmary: { },
+};
+
+export const RESEARCH_TREE: ResearchTopic[] = [
+  {
+    id: 'toolmaking',
+    name: 'Toolmaking',
+    description: 'Craft tools to boost production and unlock Workshops.',
+    cost: { wood: 80, stone: 30 },
+    barnLevelReq: 2,
+  },
+  {
+    id: 'herbalism',
+    name: 'Herbalism',
+    description: 'Basic medicine to keep settlers healthier; unlocks Infirmary.',
+    cost: { wood: 60, food: 40 },
+    barnLevelReq: 2,
+  },
+  {
+    id: 'fishing',
+    name: 'Fishing Nets',
+    description: 'Unlock Fisheries for steady food.',
+    cost: { wood: 50, stone: 20 },
+    barnLevelReq: 2,
+  },
+  {
+    id: 'fortifications',
+    name: 'Fortifications',
+    description: 'Improve defense; unlock Watchtowers.',
+    cost: { wood: 90, stone: 70 },
+    barnLevelReq: 3,
+  },
+  {
+    id: 'baking',
+    name: 'Baking',
+    description: 'Unlock Bakeries and better food variety.',
+    cost: { wood: 70, stone: 30 },
+    barnLevelReq: 2,
+  },
+];
+
+export const BUILDING_RESEARCH_REQ: Partial<Record<BuildingType, ResearchId>> = {
+  fishery: 'fishing',
+  watchtower: 'fortifications',
+  bakery: 'baking',
+  workshop: 'toolmaking',
+  infirmary: 'herbalism',
 };
