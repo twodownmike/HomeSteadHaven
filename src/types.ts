@@ -7,7 +7,7 @@ export interface Resources {
   iron: number;
 }
 
-export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery';
+export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery';
 
 export interface Building {
   id: string;
@@ -117,6 +117,7 @@ export interface GameState {
 }
 
 export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
+  barn: { wood: 120, stone: 60 },
   cabin: { wood: 10 },
   farm: { wood: 20, stone: 5 },
   lumberMill: { wood: 50, stone: 10 },
@@ -130,6 +131,7 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
 };
 
 export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number; happiness?: number }> = {
+  barn: { housing: 2, storage: 100, happiness: 0.5 },
   cabin: { housing: 4 },
   farm: { workers: 1 },
   lumberMill: { workers: 2 },
@@ -143,6 +145,7 @@ export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: 
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
+  barn: { },
   cabin: { }, // Cabins increase max population maybe?
   farm: { food: 5 },
   lumberMill: { wood: 5 },

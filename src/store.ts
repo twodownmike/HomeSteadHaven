@@ -21,7 +21,13 @@ export const useGameStore = create<GameState>()(
       ] as Settler[],
  
       happiness: 100,
-      buildings: [] as Building[],
+      buildings: [{
+        id: 'barn-main',
+        type: 'barn',
+        position: [0, 0, 0],
+        level: 1,
+        lastCollected: Date.now(),
+      }] as Building[],
       nature: (() => {
         // Initial nature generation
         const items = [];
@@ -140,6 +146,11 @@ export const useGameStore = create<GameState>()(
 
       addBuilding: (type: BuildingType, position: [number, number, number]) => {
         const state = get();
+
+        if (type === 'barn') {
+            state.addLog('The Barn already anchors your homestead and cannot be placed again.', 'warning');
+            return;
+        }
         
         // Validate collision again (server-side validation style)
         const buildingCollision = state.buildings.some(b => 
@@ -249,10 +260,14 @@ export const useGameStore = create<GameState>()(
       },
 
       demolishBuilding: (id: string) => {
-          const state = get();
-          const building = state.buildings.find(b => b.id === id);
-          if (building) {
-            state.addLog(`Demolished ${building.type}`, 'danger');
+        const state = get();
+        const building = state.buildings.find(b => b.id === id);
+        if (building?.type === 'barn') {
+          state.addLog('The Barn is the heart of the homestead and cannot be demolished.', 'warning');
+          return;
+        }
+        if (building) {
+          state.addLog(`Demolished ${building.type}`, 'danger');
             
             // Unassign workers
             const newSettlers = state.settlers.map(s => 
@@ -290,7 +305,7 @@ export const useGameStore = create<GameState>()(
           if (unemployed) {
               set((state) => ({
                   settlers: state.settlers.map(s => 
-                      s.id === unemployed.id ? { ...s, job: buildingId } : s
+                      s.id === unemployed.id ? { ...s, job: buildingId, state: 'walking', targetPosition: building.position } : s
                   )
               }));
               state.addLog(`${unemployed.name} assigned to ${building.type}.`, 'success');
@@ -758,7 +773,13 @@ export const useGameStore = create<GameState>()(
                 { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
             ] as Settler[],
             happiness: 100,
-            buildings: [] as Building[],
+            buildings: [{
+              id: 'barn-main',
+              type: 'barn',
+              position: [0, 0, 0],
+              level: 1,
+              lastCollected: Date.now(),
+            }] as Building[],
             nature: items,
             logs: [],
             weather: 'sunny' as WeatherType,

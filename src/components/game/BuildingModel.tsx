@@ -35,6 +35,58 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
 
   return (
     <group onClick={onClick}>
+      {/* Barn */}
+      {type === 'barn' && (
+        <>
+          {/* Main body */}
+          <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
+            <boxGeometry args={[3, 3, 2.5]} />
+            <meshStandardMaterial color="#b45309" roughness={0.7} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Accent trims */}
+          <mesh position={[0, 1.6, 1.3]} castShadow>
+            <boxGeometry args={[2.8, 0.2, 0.2]} />
+            <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={ghost ? 0 : 0.2} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Roof */}
+          <mesh position={[0, 3, 0]} rotation={[0, 0, Math.PI / 10]} castShadow>
+            <boxGeometry args={[3.4, 0.25, 3]} />
+            <meshStandardMaterial color="#78350f" roughness={0.5} transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 3.2, 0]} rotation={[0, Math.PI, -Math.PI / 10]} castShadow>
+            <boxGeometry args={[3.4, 0.25, 3]} />
+            <meshStandardMaterial color="#652b0b" roughness={0.5} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Doors */}
+          <mesh position={[0, 0.8, 1.31]} castShadow>
+            <boxGeometry args={[1.2, 1.6, 0.1]} />
+            <meshStandardMaterial color="#f8fafc" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 1.6, 1.32]} castShadow>
+            <boxGeometry args={[0.6, 0.4, 0.1]} />
+            <meshStandardMaterial color="#e2e8f0" transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Loft window */}
+          <mesh position={[0, 2.4, 1.26]} castShadow>
+            <boxGeometry args={[0.7, 0.5, 0.1]} />
+            <meshStandardMaterial color="#bfdbfe" emissive="#60a5fa" emissiveIntensity={ghost ? 0 : 0.5} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Silos for higher levels */}
+          {level >= 2 && (
+            <mesh position={[2, 1.5, -1]} castShadow>
+              <cylinderGeometry args={[0.5, 0.6, 3, 12]} />
+              <meshStandardMaterial color="#d4d4d8" transparent={transparent} opacity={opacity} />
+            </mesh>
+          )}
+          {level >= 3 && (
+            <mesh position={[-2, 1.7, 1]} castShadow>
+              <cylinderGeometry args={[0.6, 0.7, 3.4, 12]} />
+              <meshStandardMaterial color="#c084fc" emissive="#a855f7" emissiveIntensity={ghost ? 0 : 0.6} transparent={transparent} opacity={opacity} />
+            </mesh>
+          )}
+        </>
+      )}
+
       {/* Base (skip for farm to allow custom ground) */}
       {type !== 'farm' && (
         <mesh position={[0, 1, 0]} castShadow receiveShadow>
