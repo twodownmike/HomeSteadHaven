@@ -35,20 +35,98 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
 
   return (
     <group onClick={onClick}>
-      {/* Base */}
-      <mesh position={[0, 1, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2, 2, 2]} />
-        <meshStandardMaterial color={color} transparent={transparent} opacity={opacity} />
-      </mesh>
-      
-      {/* Roof for Cabin and Farm */}
-      {(type === 'cabin' || type === 'farm') && (
-        <mesh position={[0, 2.5, 0]} castShadow>
-          <coneGeometry args={[1.6, 1.5, 4]} />
-          <meshStandardMaterial color="#4A3B2C" transparent={transparent} opacity={opacity} />
+      {/* Base (skip for farm to allow custom ground) */}
+      {type !== 'farm' && (
+        <mesh position={[0, 1, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2, 2, 2]} />
+          <meshStandardMaterial color={color} transparent={transparent} opacity={opacity} />
         </mesh>
       )}
+      
+      {/* Cabin details */}
+      {type === 'cabin' && (
+        <>
+          {/* Timber walls */}
+          <mesh position={[0, 1.2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[2.2, 1.6, 2.2]} />
+            <meshStandardMaterial color="#8b5a2b" roughness={0.8} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Door */}
+          <mesh position={[0, 0.6, 1.11]} castShadow>
+            <boxGeometry args={[0.6, 1, 0.1]} />
+            <meshStandardMaterial color="#5b3314" transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Windows */}
+          <mesh position={[-0.9, 1.1, 0]} castShadow>
+            <boxGeometry args={[0.1, 0.6, 0.6]} />
+            <meshStandardMaterial color="#93c5fd" emissive="#60a5fa" emissiveIntensity={ghost ? 0 : 0.4} transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0.9, 1.1, 0]} castShadow>
+            <boxGeometry args={[0.1, 0.6, 0.6]} />
+            <meshStandardMaterial color="#93c5fd" emissive="#60a5fa" emissiveIntensity={ghost ? 0 : 0.4} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Roof */}
+          <mesh position={[0, 2.4, 0]} rotation={[0, 0, Math.PI / 9]} castShadow>
+            <boxGeometry args={[2.4, 0.2, 2.6]} />
+            <meshStandardMaterial color="#4a3424" roughness={0.6} transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 2.6, 0]} rotation={[0, Math.PI, -Math.PI / 9]} castShadow>
+            <boxGeometry args={[2.4, 0.2, 2.6]} />
+            <meshStandardMaterial color="#3b2a1c" roughness={0.6} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Chimney */}
+          <mesh position={[0.7, 2.8, 0.7]} castShadow>
+            <boxGeometry args={[0.4, 0.8, 0.4]} />
+            <meshStandardMaterial color="#9ca3af" roughness={0.4} transparent={transparent} opacity={opacity} />
+          </mesh>
+        </>
+      )}
 
+      {/* Farm details */}
+      {type === 'farm' && (
+        <>
+          {/* Soil plot */}
+          <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[3, 3]} />
+            <meshStandardMaterial color="#8b5a2b" transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Raised rows */}
+          {[ -1, -0.3, 0.4, 1.1 ].map((x, i) => (
+            <mesh key={i} position={[x, 0.25, 0]} receiveShadow castShadow>
+              <boxGeometry args={[0.4, 0.2, 2.6]} />
+              <meshStandardMaterial color="#a16207" roughness={0.9} transparent={transparent} opacity={opacity} />
+            </mesh>
+          ))}
+          {/* Crops */}
+          {Array.from({ length: 8 }).map((_, i) => {
+            const x = -1.2 + (i % 4) * 0.8;
+            const z = -1 + Math.floor(i / 4) * 1.2;
+            return (
+              <mesh key={`crop-${i}`} position={[x, 0.65, z]} castShadow>
+                <coneGeometry args={[0.18, 0.7, 6]} />
+                <meshStandardMaterial color="#22c55e" emissive="#16a34a" emissiveIntensity={ghost ? 0 : 0.3} transparent={transparent} opacity={opacity} />
+              </mesh>
+            );
+          })}
+          {/* Barn shed */}
+          <mesh position={[0, 1, 1.4]} castShadow>
+            <boxGeometry args={[1.4, 1.2, 0.8]} />
+            <meshStandardMaterial color="#b45309" roughness={0.8} transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 1.8, 1.4]} castShadow>
+            <boxGeometry args={[1.6, 0.3, 1]} />
+            <meshStandardMaterial color="#92400e" roughness={0.7} transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Fence corners */}
+          {[[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]].map(([fx, fz], i) => (
+            <mesh key={`fence-${i}`} position={[fx, 0.6, fz]} castShadow>
+              <boxGeometry args={[0.15, 1.2, 0.15]} />
+              <meshStandardMaterial color="#d97706" transparent={transparent} opacity={opacity} />
+            </mesh>
+          ))}
+        </>
+      )}
+      
       {/* Details for Mine */}
       {type === 'mine' && (
         <mesh position={[0.8, 0.5, 0.8]} castShadow>
