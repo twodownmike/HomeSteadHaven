@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
@@ -75,11 +75,6 @@ export const GameUI: React.FC = () => {
       const type = res as ResourceType;
       return resources[type] >= (upgradeCost[type] || 0) * upgradeMultiplier;
   });
-
-  // Calculate Max Storage
-  const baseStorage = 100;
-  const additionalStorage = buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
-  const maxStorage = baseStorage + additionalStorage;
 
   const canFestival = resources.wood >= 30 && resources.food >= 40;
   const canExpedition = resources.food >= 25 && resources.wood >= 15;
@@ -198,167 +193,143 @@ export const GameUI: React.FC = () => {
   }, []);
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4">
-      {/* Top HUD: Resources + Quick actions */}
-        <div className="flex justify-between items-start pointer-events-auto">
-        <div className="flex gap-4">
-            {/* Resources */}
-            <div className="flex gap-4 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
-                {Object.entries(resources).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-2 min-w-[80px]">
-                        <ResourceIcon type={key as ResourceType} />
-                        <div className="flex flex-col">
-                            <span className="text-xs uppercase opacity-60 font-bold tracking-wider">{key}</span>
-                            <span className={`font-mono font-bold ${value >= maxStorage ? 'text-red-400' : ''}`}>
-                                {Math.floor(value)}
-                            </span>
-                        </div>
-                    </div>
-                ))}
-                
-                {/* Storage Indicator */}
-                <div className="border-l border-white/10 pl-4 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-gray-400" />
-                    <div className="flex flex-col">
-                        <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Cap</span>
-                        <span className="font-mono font-bold text-gray-300">{maxStorage}</span>
-                    </div>
-                </div>
+    <div className="absolute inset-0 pointer-events-none px-3 sm:px-4 py-3 flex flex-col gap-4">
+      {/* Top HUD (mobile-friendly wrap) */}
+      <div className="pointer-events-auto flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2 sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[110px]">
+              <div className="text-sm font-bold">Day {day.toFixed(1)}</div>
             </div>
-
-            {/* Population */}
-            <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[80px]">
-                <Users className="w-4 h-4 text-blue-400" />
-                <div className="flex flex-col">
-                    <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Pop</span>
-                    <span className="font-mono font-bold">{settlers.length}</span>
-                </div>
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[110px]">
+              <div className="text-sm font-bold capitalize">{season}</div>
+              <div className="text-xs text-gray-300 flex items-center gap-1">
+                {weather === 'rain' && <CloudRain className="w-4 h-4 text-blue-300" />}
+                {weather === 'snow' && <Snowflake className="w-4 h-4 text-cyan-100" />}
+                {weather === 'sunny' && <Sun className="w-4 h-4 text-amber-300" />}
+                {weather}
+              </div>
             </div>
-
-            {/* Happiness */}
-            <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[80px]">
-                <Smile className={`w-4 h-4 ${happiness > 80 ? 'text-green-400' : happiness > 40 ? 'text-yellow-400' : 'text-red-400'}`} />
-                <div className="flex flex-col">
-                    <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Happy</span>
-                    <span className="font-mono font-bold">{Math.floor(happiness)}%</span>
-                </div>
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[140px]">
+              <div className="text-sm font-bold flex items-center gap-2">
+                <Smile className="w-4 h-4 text-green-300" /> Happiness
+              </div>
+              <div className="text-sm">{Math.floor(happiness)}%</div>
+              <div className="w-full h-2 bg-white/10 rounded-full mt-1 overflow-hidden">
+                <div className="h-full bg-green-400" style={{ width: `${happiness}%` }} />
+              </div>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['wood','food','stone','iron'] as ResourceType[]).map((res) => (
+              <div key={res} className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-2 min-w-[84px] justify-between">
+                <ResourceIcon type={res} />
+                <div className="text-sm font-bold">{resources[res]}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="flex gap-2 items-stretch">
-            <div className="flex gap-2">
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
-                <div className="text-sm font-bold">Day {day.toFixed(1)}</div>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[140px]">
+              <div className="text-sm font-bold">Population</div>
+              <div className="text-sm">{settlers.length} settlers</div>
+              <div className="text-xs text-gray-300">{buildings.length} buildings</div>
             </div>
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-2">
-                {weather === 'sunny' && <Sun className="w-4 h-4 text-yellow-300" />}
-                {weather === 'rain' && <CloudRain className="w-4 h-4 text-blue-300" />}
-                {weather === 'snow' && <Snowflake className="w-4 h-4 text-cyan-200" />}
-                <div className="flex flex-col leading-tight">
-                    <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Weather</span>
-                    <span className="font-mono font-bold capitalize">{weather}</span>
-                </div>
-            </div>
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl flex flex-col leading-tight">
-                <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Season</span>
-                <span className="font-mono font-bold capitalize">{season}</span>
-            </div>
-            </div>
-            {/* Quick Actions */}
-            <div className="flex gap-2">
-              <button
-                onClick={celebrateFestival}
-                disabled={!canFestival}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${canFestival ? 'bg-pink-600/30 border-pink-400 text-pink-100 hover:bg-pink-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
-              >
-                <PartyPopper className="w-4 h-4" />
-                Festival
-              </button>
-              <button
-                onClick={sendExpedition}
-                disabled={!canExpedition}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${canExpedition ? 'bg-indigo-600/30 border-indigo-400 text-indigo-100 hover:bg-indigo-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
-              >
-                <Compass className="w-4 h-4" />
-                Expedition
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setShowObjectives((v) => !v)}
-                className={`px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${showObjectives ? 'bg-emerald-600/30 border-emerald-400 text-emerald-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
-              >
-                Objectives
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving || isLoadingSave}
-                className={`px-3 py-2 rounded-xl border text-sm font-semibold transition-colors flex items-center gap-2 ${isSaving ? 'bg-yellow-600/30 border-yellow-400 text-yellow-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
-              >
-                <Save className="w-4 h-4" />
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
-              {user ? (
-                <button
-                  onClick={handleLogout}
-                  className="px-3 py-2 rounded-xl border border-white/10 text-sm font-semibold flex items-center gap-2 bg-white/10 hover:bg-white/20"
-                >
-                  <LogOut className="w-4 h-4" />
-                  {user.displayName || 'Logout'}
-                </button>
-              ) : (
-                <button
-                  onClick={handleLogin}
-                  className="px-3 py-2 rounded-xl border border-white/10 text-sm font-semibold flex items-center gap-2 bg-white/5 hover:bg-white/10"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Sign in
-                </button>
-              )}
-            </div>
-            <button 
-                onClick={() => setShowSettings(!showSettings)}
-                className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl hover:bg-white/10 transition-colors"
+          </div>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <button
+              onClick={celebrateFestival}
+              disabled={!canFestival}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${canFestival ? 'bg-pink-600/30 border-pink-400 text-pink-100 hover:bg-pink-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
             >
-                <Settings className="w-5 h-5" />
+              <PartyPopper className="w-4 h-4" />
+              Festival
             </button>
+            <button
+              onClick={sendExpedition}
+              disabled={!canExpedition}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${canExpedition ? 'bg-indigo-600/30 border-indigo-400 text-indigo-100 hover:bg-indigo-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
+            >
+              <Compass className="w-4 h-4" />
+              Expedition
+            </button>
+            <button 
+              onClick={() => setShowObjectives((v) => !v)}
+              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${showObjectives ? 'bg-emerald-600/30 border-emerald-400 text-emerald-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
+            >
+              Objectives
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving || isLoadingSave}
+              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 ${isSaving ? 'bg-yellow-600/30 border-yellow-400 text-yellow-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="px-3 py-2 rounded-xl border border-white/10 text-xs sm:text-sm font-semibold flex items-center gap-2 bg-white/10 hover:bg-white/20"
+              >
+                <LogOut className="w-4 h-4" />
+                {user.displayName || 'Logout'}
+              </button>
+            ) : (
+              <button
+                onClick={handleLogin}
+                className="px-3 py-2 rounded-xl border border-white/10 text-xs sm:text-sm font-semibold flex items-center gap-2 bg-white/5 hover:bg-white/10"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign in
+              </button>
+            )}
+            <button 
+              onClick={() => setShowSettings(!showSettings)}
+              className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl hover:bg-white/10 transition-colors"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Settings Menu */}
       {showSettings && (
-          <div className="absolute top-20 right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 text-white shadow-xl pointer-events-auto z-50 flex flex-col gap-2 min-w-[200px]">
-              <h3 className="font-bold text-lg mb-2">Settings</h3>
-              <div className="flex flex-col gap-2">
-                  <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Game Speed</span>
-                  <div className="grid grid-cols-3 gap-2">
-                      {[1200, 800, 500].map((rate) => (
-                          <button
-                            key={rate}
-                            onClick={() => setTickRate(rate)}
-                            className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${tickRate === rate ? 'bg-green-600/30 border-green-400 text-green-100' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-                          >
-                            {Math.round(1000 / rate)}x
-                          </button>
-                      ))}
-                  </div>
-                  <div className="text-[11px] text-gray-400">Higher speeds update the world more frequently.</div>
-              </div>
-              <button 
-                onClick={handleReset}
-                className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 px-4 py-2 rounded-lg transition-colors w-full text-left"
-              >
-                  <RefreshCw className="w-4 h-4" />
-                  Reset Progress
-              </button>
-              <div className="text-xs text-gray-400 mt-2">
-                  v0.2.0 Beta
-              </div>
+        <div className="absolute top-20 right-3 sm:right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 text-white shadow-xl pointer-events-auto z-50 flex flex-col gap-2 min-w-[200px]">
+          <h3 className="font-bold text-lg mb-2">Settings</h3>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Game Speed</span>
+            <div className="grid grid-cols-3 gap-2">
+              {[1200, 800, 500].map((rate) => (
+                <button
+                  key={rate}
+                  onClick={() => setTickRate(rate)}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${tickRate === rate ? 'bg-green-600/30 border-green-400 text-green-100' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                >
+                  {Math.round(1000 / rate)}x
+                </button>
+              ))}
+            </div>
+            <div className="text-[11px] text-gray-400">Higher speeds update the world more frequently.</div>
           </div>
+          <button 
+            onClick={handleReset}
+            className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 px-4 py-2 rounded-lg transition-colors w-full text-left"
+          >
+              <RefreshCw className="w-4 h-4" />
+              Reset Progress
+          </button>
+          <div className="text-xs text-gray-400 mt-2">
+              v0.2.0 Beta
+          </div>
+        </div>
       )}
 
       {/* Event Logs */}
-      <div className="absolute bottom-32 left-4 flex flex-col gap-2 w-[300px] pointer-events-none opacity-80">
+      <div className="absolute bottom-32 left-3 sm:left-4 flex flex-col gap-2 w-[300px] pointer-events-none opacity-80">
           {logs.slice(0, 5).map((log) => (
               <div 
                 key={log.id}
@@ -377,7 +348,7 @@ export const GameUI: React.FC = () => {
 
       {/* Building Inspection Panel */}
       {selectedBuildingData && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-40 min-w-[300px]">
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-40 min-w-[300px] max-w-[90vw]">
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="font-bold text-xl capitalize">{selectedBuildingData.type}</h3>
@@ -389,7 +360,6 @@ export const GameUI: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-3">
-            {/* Stats */}
             {selectedStats && (
               <div className="grid grid-cols-2 gap-2 text-xs bg-white/5 border border-white/10 rounded-xl p-3">
                 {selectedStats.housing && <div className="text-gray-200">Housing: +{selectedStats.housing}</div>}
@@ -399,7 +369,6 @@ export const GameUI: React.FC = () => {
               </div>
             )}
 
-            {/* Staffing */}
             {selectedStats?.workers && (
               <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-3 text-sm">
                 <div>
@@ -440,8 +409,8 @@ export const GameUI: React.FC = () => {
               </div>
               <div className="flex flex-col items-end text-xs">
                 {upgradeCost && Object.entries(upgradeCost).map(([res, amount]) => (
-                  <div key={res} className={resources[res as ResourceType] < amount * upgradeMultiplier ? 'text-red-400' : 'text-gray-300'}>
-                    {amount * upgradeMultiplier} {res.charAt(0).toUpperCase()}
+                  <div key={res} className={resources[res as ResourceType] < (amount as number) * upgradeMultiplier ? 'text-red-400' : 'text-gray-300'}>
+                    {(amount as number) * upgradeMultiplier} {res.charAt(0).toUpperCase()}
                   </div>
                 ))}
               </div>
@@ -460,7 +429,7 @@ export const GameUI: React.FC = () => {
 
       {/* Objectives Panel (top) */}
       {showObjectives && (
-        <div className="pointer-events-auto w-full max-w-4xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-4">
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-2 sm:mt-4">
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-300" />
             <h3 className="text-lg font-bold">Objectives</h3>
@@ -508,12 +477,11 @@ export const GameUI: React.FC = () => {
       )}
 
       {/* Bottom HUD */}
-      <div className="pointer-events-none w-full px-4 pb-4 flex flex-col gap-3">
-        {/* Build toggle & panel */}
-        <div className="flex justify-end pointer-events-auto">
+      <div className="pointer-events-none w-full pb-4 flex flex-col gap-3">
+        <div className="pointer-events-auto fixed bottom-4 left-0 right-0 flex justify-center z-40 px-3 sm:px-0">
           <button
             onClick={() => setShowBuildMenu((v: boolean) => !v)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold shadow-lg transition-colors ${showBuildMenu ? 'bg-yellow-500/20 border-yellow-300 text-yellow-100' : 'bg-black/60 border-white/10 text-white hover:bg-white/10'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold shadow-lg transition-colors w-full max-w-xs ${showBuildMenu ? 'bg-yellow-500/20 border-yellow-300 text-yellow-100' : 'bg-black/70 border-white/10 text-white hover:bg-white/10'}`}
           >
             <Hammer className="w-4 h-4" />
             {showBuildMenu ? 'Close Build' : 'Build'}
@@ -521,7 +489,7 @@ export const GameUI: React.FC = () => {
         </div>
 
         {showBuildMenu && (
-          <div className="pointer-events-auto mx-auto w-full max-w-5xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="pointer-events-auto mx-auto w-full max-w-5xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl mt-12">
             {isBuilding && selectedBuilding && (
               <div className="mb-3 bg-yellow-500/15 border border-yellow-400/40 text-yellow-100 px-4 py-2 rounded-lg text-sm font-semibold">
                 Placing {selectedBuilding}... tap ground to confirm.
@@ -573,7 +541,6 @@ export const GameUI: React.FC = () => {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
