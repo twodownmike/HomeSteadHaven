@@ -478,25 +478,6 @@ export const useGameStore = create<GameState>()(
                 
                 if (dist < speed) {
                     return { ...settler, position: settler.targetPosition, targetPosition: null, state: 'idle' };
-                } else {
-                    return { 
-                        ...settler, 
-                        position: [
-                            settler.position[0] + (dx / dist) * speed,
-                            0,
-                            settler.position[2] + (dz / dist) * speed
-                        ] as [number, number, number]
-                    };
-                }
-            }
-            return settler;
-        });
-                       const tx = Math.cos(angle) * dist; // Wander around center
-                       const tz = Math.sin(angle) * dist;
-                       return { ...settler, state: 'walking', targetPosition: [tx, 0, tz] };
-                  }
-                  // Reset state to idle if was working/resting but shouldn't be
-                  return { ...settler, state: 'idle' };
               } 
               
               // Movement Logic
