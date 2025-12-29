@@ -9,10 +9,20 @@ interface TreeProps {
 }
 
 export const Tree: React.FC<TreeProps> = ({ id, position, scale = 1 }) => {
-  const { addResource, removeNature, isBuilding } = useGameStore();
+  const { addResource, removeNature, isBuilding, season } = useGameStore();
   const [hovered, setHovered] = useState(false);
   const [lastGathered, setLastGathered] = useState(0);
   const [clicks, setClicks] = useState(0);
+
+  const getLeafColor = () => {
+    switch (season) {
+        case 'spring': return hovered ? "#2e8b2e" : "#228B22";
+        case 'summer': return hovered ? "#008000" : "#006400";
+        case 'autumn': return hovered ? "#CD853F" : "#D2691E"; // Orange-ish
+        case 'winter': return hovered ? "#F0FFFF" : "#E0FFFF"; // Snowy
+        default: return hovered ? "#2e8b2e" : "#228B22";
+    }
+  };
 
   const handleClick = (e: any) => {
     e.stopPropagation();
@@ -43,11 +53,11 @@ export const Tree: React.FC<TreeProps> = ({ id, position, scale = 1 }) => {
       {/* Leaves */}
       <mesh position={[0, 2, 0]} castShadow>
         <coneGeometry args={[1, 2, 8]} />
-        <meshStandardMaterial color={hovered ? "#2e8b2e" : "#228B22"} />
+        <meshStandardMaterial color={getLeafColor()} />
       </mesh>
       <mesh position={[0, 3, 0]} castShadow>
         <coneGeometry args={[0.8, 1.5, 8]} />
-        <meshStandardMaterial color={hovered ? "#2e8b2e" : "#228B22"} />
+        <meshStandardMaterial color={getLeafColor()} />
       </mesh>
       
       {hovered && !isBuilding && (
@@ -77,7 +87,7 @@ interface RockProps {
 }
 
 export const Rock: React.FC<RockProps> = ({ id, position, scale = 1 }) => {
-    const { addResource, removeNature, isBuilding } = useGameStore();
+    const { addResource, removeNature, isBuilding, season } = useGameStore();
     const [hovered, setHovered] = useState(false);
     const [lastGathered, setLastGathered] = useState(0);
     const [clicks, setClicks] = useState(0);
@@ -109,7 +119,7 @@ export const Rock: React.FC<RockProps> = ({ id, position, scale = 1 }) => {
         >
             <mesh castShadow receiveShadow>
                 <dodecahedronGeometry args={[0.8, 0]} />
-                <meshStandardMaterial color={hovered ? "#909090" : "#808080"} flatShading />
+                <meshStandardMaterial color={getRockColor()} flatShading />
             </mesh>
 
             {hovered && !isBuilding && (

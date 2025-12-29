@@ -2,14 +2,25 @@ import React, { useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingModel } from './BuildingModel';
 import { EnvironmentProps } from './Nature';
+import { Settler } from './Settler';
 
 export const Scene: React.FC = () => {
-  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding } = useGameStore();
+  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers } = useGameStore();
   const [hoverPos, setHoverPos] = useState<[number, number, number] | null>(null);
   const [isValidPlacement, setIsValidPlacement] = useState(true);
   
   // Grid size for snapping
   const GRID_SIZE = 2;
+
+  const getGroundColor = () => {
+      switch (season) {
+          case 'spring': return '#5C8C46';
+          case 'summer': return '#4A7036';
+          case 'autumn': return '#8B7355'; // More brownish
+          case 'winter': return '#F0F8FF'; // AliceBlue
+          default: return '#5C8C46';
+      }
+  };
 
   const checkCollision = (pos: [number, number, number]) => {
     // Check collision with existing buildings
@@ -87,7 +98,7 @@ export const Scene: React.FC = () => {
         onClick={handleClick}
       >
         <planeGeometry args={[100, 100]} />
-        <meshStandardMaterial color="#5C8C46" />
+        <meshStandardMaterial color={getGroundColor()} />
       </mesh>
       
       {/* Grid Helper to visualize tiles */}
@@ -103,6 +114,11 @@ export const Scene: React.FC = () => {
             onClick={(e) => handleBuildingClick(e, building.id)}
           />
         </group>
+      ))}
+
+      {/* Render Settlers */}
+      {settlers.map((settler) => (
+        <Settler key={settler.id} settler={settler} />
       ))}
 
       {/* Render Ghost Building for placement */}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile } from 'lucide-react';
 
 const ResourceIcon = ({ type }: { type: ResourceType }) => {
   switch (type) {
@@ -22,6 +22,7 @@ export const GameUI: React.FC = () => {
     setSelectedBuilding, 
     day, 
     reset,
+    season,
     buildings,
     selectedBuildingId,
     selectBuildingId,
@@ -94,7 +95,16 @@ export const GameUI: React.FC = () => {
                 <Users className="w-4 h-4 text-blue-400" />
                 <div className="flex flex-col">
                     <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Pop</span>
-                    <span className="font-mono font-bold">{Math.floor(population)}</span>
+                    <span className="font-mono font-bold">{settlers.length}</span>
+                </div>
+            </div>
+
+            {/* Happiness */}
+            <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[80px]">
+                <Smile className={`w-4 h-4 ${happiness > 80 ? 'text-green-400' : happiness > 40 ? 'text-yellow-400' : 'text-red-400'}`} />
+                <div className="flex flex-col">
+                    <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Happy</span>
+                    <span className="font-mono font-bold">{Math.floor(happiness)}%</span>
                 </div>
             </div>
         </div>

@@ -21,6 +21,19 @@ export type NatureType = 'tree' | 'rock';
 
 export type WeatherType = 'sunny' | 'rain' | 'snow';
 
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+
+export interface Settler {
+  id: string;
+  name: string;
+  position: [number, number, number];
+  targetPosition: [number, number, number] | null;
+  state: 'idle' | 'walking' | 'working' | 'resting';
+  job?: string; // buildingId
+  home?: string; // buildingId
+  actionTimer: number; // Time until next state change or action completion
+}
+
 export interface NatureItem {
   id: string;
   type: NatureType;
@@ -37,11 +50,13 @@ export interface LogEntry {
 
 export interface GameState {
   resources: Resources;
-  population: number;
+  settlers: Settler[];
+  happiness: number;
   buildings: Building[];
   nature: NatureItem[];
   logs: LogEntry[];
   weather: WeatherType;
+  season: Season;
   selectedBuilding: BuildingType | null; // For placement
   selectedBuildingId: string | null; // For inspecting existing building
   isBuilding: boolean;
@@ -53,6 +68,8 @@ export interface GameState {
   addBuilding: (type: BuildingType, position: [number, number, number]) => void;
   upgradeBuilding: (id: string) => void;
   demolishBuilding: (id: string) => void;
+  assignWorker: (buildingId: string) => void;
+  unassignWorker: (buildingId: string) => void;
   removeNature: (id: string) => void;
   addLog: (message: string, type?: LogEntry['type']) => void;
   setSelectedBuilding: (type: BuildingType | null) => void;
