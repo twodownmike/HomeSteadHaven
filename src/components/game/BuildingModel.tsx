@@ -23,6 +23,9 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
       case 'warehouse': return '#A0522D'; // Sienna
       case 'bakery': return '#d97706'; // Warm bread tone
       case 'well': return '#3b82f6'; // Water blue
+      case 'campfire': return '#f97316'; // Orange glow
+      case 'watchtower': return '#9ca3af'; // Gray timber
+      case 'fishery': return '#0ea5e9'; // Water teal
       default: return '#ffffff';
     }
   }, [type, ghost, isValid]);
@@ -92,6 +95,68 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
             <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
           </mesh>
         </>
+      )}
+
+      {/* Campfire */}
+      {type === 'campfire' && (
+        <>
+          <mesh position={[0, 0.8, 0]} castShadow>
+            <cylinderGeometry args={[0.6, 0.7, 0.4, 10]} />
+            <meshStandardMaterial color="#92400e" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 1.1, 0]}>
+            <coneGeometry args={[0.5, 0.6, 10]} />
+            <meshStandardMaterial color="#f97316" emissive="#fb923c" emissiveIntensity={ghost ? 0 : 1.2} transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1, 0.1, 8, 24]} />
+            <meshStandardMaterial color="#57534e" transparent={transparent} opacity={opacity} />
+          </mesh>
+        </>
+      )}
+
+      {/* Watchtower */}
+      {type === 'watchtower' && (
+        <>
+          <mesh position={[0, 2, 0]} castShadow>
+            <cylinderGeometry args={[0.7, 0.7, 4, 8]} />
+            <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 4.2, 0]} castShadow>
+            <boxGeometry args={[2.2, 0.4, 2.2]} />
+            <meshStandardMaterial color="#4b5563" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 4.8, 0]} castShadow>
+            <coneGeometry args={[1.6, 1, 6]} />
+            <meshStandardMaterial color="#1f2937" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[1, 1.2, 1]} rotation={[0, 0, Math.PI / 2]}>
+            <boxGeometry args={[0.2, 2, 0.5]} />
+            <meshStandardMaterial color="#d1d5db" transparent={transparent} opacity={opacity} />
+          </mesh>
+        </>
+      )}
+
+      {/* Fishery */}
+      {type === 'fishery' && (
+        <group>
+          <mesh position={[0, 1, 0]} castShadow>
+            <boxGeometry args={[2.5, 1.6, 2]} />
+            <meshStandardMaterial color="#0ea5e9" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 2.3, 0]} castShadow>
+            <boxGeometry args={[2.7, 0.4, 2.2]} />
+            <meshStandardMaterial color="#075985" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[1.6, 0.5, 0]} castShadow>
+            <boxGeometry args={[1.5, 0.3, 1]} />
+            <meshStandardMaterial color="#7c3aed" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[3, 3]} />
+            <meshStandardMaterial color="#38bdf8" transparent opacity={0.3} />
+          </mesh>
+        </group>
       )}
 
       {/* Selection Ring */}

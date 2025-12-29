@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store';
-import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile } from 'lucide-react';
+import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective } from '../../types';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2 } from 'lucide-react';
 
 const ResourceIcon = ({ type }: { type: ResourceType }) => {
   switch (type) {
@@ -31,7 +31,13 @@ export const GameUI: React.FC = () => {
     demolishBuilding,
     logs,
     tickRate,
-    setTickRate
+    setTickRate,
+    objectives,
+    claimObjective,
+    celebrateFestival,
+    sendExpedition,
+    assignWorker,
+    unassignWorker,
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -53,6 +59,8 @@ export const GameUI: React.FC = () => {
   const selectedBuildingData = selectedBuildingId ? buildings.find(b => b.id === selectedBuildingId) : null;
   const upgradeCost = selectedBuildingData ? BUILDING_COSTS[selectedBuildingData.type] : null;
   const upgradeMultiplier = selectedBuildingData ? selectedBuildingData.level + 1 : 1;
+  const selectedStats = selectedBuildingData ? BUILDING_STATS[selectedBuildingData.type] : null;
+  const assignedWorkers = selectedBuildingData ? settlers.filter(s => s.job === selectedBuildingData.id).length : 0;
 
   const canAffordUpgrade = upgradeCost && Object.keys(upgradeCost).every(res => {
       const type = res as ResourceType;
@@ -64,10 +72,54 @@ export const GameUI: React.FC = () => {
   const additionalStorage = buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
   const maxStorage = baseStorage + additionalStorage;
 
+  const canFestival = resources.wood >= 30 && resources.food >= 40;
+  const canExpedition = resources.food >= 25 && resources.wood >= 15;
+
+  const objectiveProgress = (obj: Objective) => {
+      const { goal } = obj;
+      if (goal.type === 'resource' && goal.key) {
+          const current = resources[goal.key as ResourceType];
+          return Math.min(current / goal.amount, 1);
+      }
+      if (goal.type === 'building' && goal.key) {
+          const count = buildings.filter(b => b.type === goal.key).length;
+          return Math.min(count / goal.amount, 1);
+      }
+      if (goal.type === 'population') {
+          return Math.min(settlers.length / goal.amount, 1);
+      }
+      if (goal.type === 'happiness') {
+          return Math.min(happiness / goal.amount, 1);
+      }
+      return 0;
+  };
+
+  const objectiveProgressLabel = (obj: Objective) => {
+      const { goal } = obj;
+      if (goal.type === 'resource' && goal.key) {
+          const current = Math.floor(resources[goal.key as ResourceType]);
+          return `${current}/${goal.amount}`;
+      }
+      if (goal.type === 'building' && goal.key) {
+          const count = buildings.filter(b => b.type === goal.key).length;
+          return `${count}/${goal.amount}`;
+      }
+      if (goal.type === 'population') {
+          return `${settlers.length}/${goal.amount}`;
+      }
+      if (goal.type === 'happiness') {
+          return `${Math.floor(happiness)}% / ${goal.amount}%`;
+      }
+      return '';
+  };
+
+  const workerCapacity = selectedStats?.workers || 0;
+  const workerText = workerCapacity ? `${assignedWorkers}/${workerCapacity} workers` : 'No workers needed';
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4">
-      {/* Top HUD: Resources */}
-      <div className="flex justify-between items-start pointer-events-auto">
+      {/* Top HUD: Resources + Quick actions */}
+        <div className="flex justify-between items-start pointer-events-auto">
         <div className="flex gap-4">
             {/* Resources */}
             <div className="flex gap-4 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
@@ -112,7 +164,8 @@ export const GameUI: React.FC = () => {
             </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-stretch">
+            <div className="flex gap-2">
             <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
                 <div className="text-sm font-bold">Day {day.toFixed(1)}</div>
             </div>
@@ -128,6 +181,26 @@ export const GameUI: React.FC = () => {
             <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl flex flex-col leading-tight">
                 <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Season</span>
                 <span className="font-mono font-bold capitalize">{season}</span>
+            </div>
+            </div>
+            {/* Quick Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={celebrateFestival}
+                disabled={!canFestival}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${canFestival ? 'bg-pink-600/30 border-pink-400 text-pink-100 hover:bg-pink-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
+              >
+                <PartyPopper className="w-4 h-4" />
+                Festival
+              </button>
+              <button
+                onClick={sendExpedition}
+                disabled={!canExpedition}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${canExpedition ? 'bg-indigo-600/30 border-indigo-400 text-indigo-100 hover:bg-indigo-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
+              >
+                <Compass className="w-4 h-4" />
+                Expedition
+              </button>
             </div>
             <button 
                 onClick={() => setShowSettings(!showSettings)}
@@ -202,6 +275,42 @@ export const GameUI: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-3">
+                  {/* Stats */}
+                  {selectedStats && (
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-white/5 border border-white/10 rounded-xl p-3">
+                        {selectedStats.housing && <div className="text-gray-200">Housing: +{selectedStats.housing}</div>}
+                        {selectedStats.storage && <div className="text-gray-200">Storage: +{selectedStats.storage * selectedBuildingData.level}</div>}
+                        {selectedStats.happiness && <div className="text-gray-200">Happiness: +{(selectedStats.happiness * selectedBuildingData.level).toFixed(1)}</div>}
+                        {selectedStats.workers !== undefined && (
+                            <div className="text-gray-200">{workerText}</div>
+                        )}
+                    </div>
+                  )}
+
+                  {/* Staffing */}
+                  {selectedStats?.workers && (
+                    <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-3 text-sm">
+                        <div>
+                            <div className="font-semibold">Workers</div>
+                            <div className="text-gray-300">{workerText}</div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                              onClick={() => assignWorker(selectedBuildingData.id)}
+                              className="px-3 py-2 rounded-lg bg-green-600/30 hover:bg-green-600/50 border border-green-400 text-green-50 text-xs"
+                            >
+                              + Assign
+                            </button>
+                            <button 
+                              onClick={() => unassignWorker(selectedBuildingData.id)}
+                              className="px-3 py-2 rounded-lg bg-yellow-600/30 hover:bg-yellow-600/50 border border-yellow-400 text-yellow-50 text-xs"
+                            >
+                              - Unassign
+                            </button>
+                        </div>
+                    </div>
+                  )}
+
                   <button 
                       onClick={() => upgradeBuilding(selectedBuildingData.id)}
                       disabled={!canAffordUpgrade}
@@ -283,6 +392,52 @@ export const GameUI: React.FC = () => {
             );
           })}
         </div>
+      </div>
+
+      {/* Objectives */}
+      <div className="w-full max-w-4xl flex flex-col gap-2 bg-black/60 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl">
+          <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-300" />
+              <h3 className="text-lg font-bold">Objectives</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {objectives.map((obj) => {
+                  const progress = objectiveProgress(obj);
+                  const label = objectiveProgressLabel(obj);
+                  const complete = obj.complete;
+                  const claimed = obj.claimed;
+                  return (
+                      <div key={obj.id} className={`p-3 rounded-xl border ${complete ? 'border-green-400/40 bg-green-900/20' : 'border-white/10 bg-white/5'} shadow-inner`}>
+                          <div className="flex justify-between items-start">
+                              <div>
+                                  <div className="font-bold">{obj.title}</div>
+                                  <div className="text-xs text-gray-300">{obj.description}</div>
+                              </div>
+                              {complete ? <CheckCircle2 className="w-5 h-5 text-green-300" /> : null}
+                          </div>
+                          <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
+                              <div className={`h-full ${complete ? 'bg-green-400' : 'bg-blue-400'}`} style={{ width: `${progress * 100}%` }} />
+                          </div>
+                          <div className="text-[11px] text-gray-300 mt-1">Progress: {label}</div>
+                          <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center gap-1 text-xs text-amber-200">
+                                  <Gift className="w-3 h-3" />
+                                  {Object.entries(obj.reward).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
+                              </div>
+                              {complete && !claimed && (
+                                  <button
+                                    onClick={() => claimObjective(obj.id)}
+                                    className="px-3 py-1 rounded-lg bg-green-600/60 hover:bg-green-600 text-sm font-semibold"
+                                  >
+                                    Claim
+                                  </button>
+                              )}
+                              {claimed && <span className="text-green-300 text-xs">Claimed</span>}
+                          </div>
+                      </div>
+                  );
+              })}
+          </div>
       </div>
     </div>
   );

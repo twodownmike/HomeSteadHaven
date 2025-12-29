@@ -7,7 +7,7 @@ export interface Resources {
   iron: number;
 }
 
-export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well';
+export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery';
 
 export interface Building {
   id: string;
@@ -48,6 +48,24 @@ export interface LogEntry {
   type: 'info' | 'success' | 'warning' | 'danger';
 }
 
+export type ObjectiveGoalType = 'resource' | 'building' | 'population' | 'happiness';
+
+export interface ObjectiveGoal {
+  type: ObjectiveGoalType;
+  key?: ResourceType | BuildingType;
+  amount: number;
+}
+
+export interface Objective {
+  id: string;
+  title: string;
+  description: string;
+  goal: ObjectiveGoal;
+  reward: Partial<Resources>;
+  complete: boolean;
+  claimed: boolean;
+}
+
 export interface GameState {
   resources: Resources;
   settlers: Settler[];
@@ -62,6 +80,7 @@ export interface GameState {
   isBuilding: boolean;
   tickRate: number;
   day: number;
+  objectives: Objective[];
   
   // Actions
   addResource: (type: ResourceType, amount: number) => void;
@@ -76,6 +95,9 @@ export interface GameState {
   setSelectedBuilding: (type: BuildingType | null) => void;
   selectBuildingId: (id: string | null) => void;
   setTickRate: (rateMs: number) => void;
+  claimObjective: (id: string) => void;
+  celebrateFestival: () => void;
+  sendExpedition: () => void;
   tick: () => void;
   reset: () => void;
 }
@@ -88,6 +110,9 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   warehouse: { wood: 100, stone: 20 },
   bakery: { wood: 60, stone: 20 },
   well: { wood: 30, stone: 40 },
+  campfire: { wood: 30, stone: 5 },
+  watchtower: { wood: 80, stone: 30 },
+  fishery: { wood: 40, stone: 10 },
 };
 
 export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number; happiness?: number }> = {
@@ -98,6 +123,9 @@ export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: 
   warehouse: { storage: 200 },
   bakery: { workers: 2, happiness: 0.4 },
   well: { happiness: 0.6 },
+  campfire: { housing: 1, happiness: 1.2 },
+  watchtower: { workers: 1, happiness: 0.2 },
+  fishery: { workers: 1 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
@@ -108,4 +136,7 @@ export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
   warehouse: { },
   bakery: { food: 8 },
   well: { },
+  campfire: { },
+  watchtower: { },
+  fishery: { food: 6 },
 };

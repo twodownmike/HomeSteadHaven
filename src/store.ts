@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -44,6 +44,44 @@ export const useGameStore = create<GameState>()(
       isBuilding: false,
       tickRate: 1000,
       day: 1,
+      objectives: [
+          {
+              id: 'obj-wood',
+              title: 'Gatherer',
+              description: 'Stockpile 150 wood to prove the village can build.',
+              goal: { type: 'resource', key: 'wood', amount: 150 },
+              reward: { food: 40 },
+              complete: false,
+              claimed: false,
+          },
+          {
+              id: 'obj-farm',
+              title: 'First Harvest',
+              description: 'Build a farm to secure food.',
+              goal: { type: 'building', key: 'farm', amount: 1 },
+              reward: { wood: 60, food: 30 },
+              complete: false,
+              claimed: false,
+          },
+          {
+              id: 'obj-pop',
+              title: 'New Neighbors',
+              description: 'Reach 6 settlers in your homestead.',
+              goal: { type: 'population', amount: 6 },
+              reward: { stone: 50, food: 50 },
+              complete: false,
+              claimed: false,
+          },
+          {
+              id: 'obj-happy',
+              title: 'Joyous Village',
+              description: 'Raise happiness to 85% or higher.',
+              goal: { type: 'happiness', amount: 85 },
+              reward: { wood: 80, iron: 20 },
+              complete: false,
+              claimed: false,
+          },
+      ] as Objective[],
 
       addLog: (message: string, type: LogEntry['type'] = 'info') => {
           set((state) => {
@@ -286,6 +324,116 @@ export const useGameStore = create<GameState>()(
         set({ tickRate: clamped });
       },
 
+      celebrateFestival: () => {
+        const state = get();
+        const costWood = 30;
+        const costFood = 40;
+
+        if (state.resources.wood < costWood || state.resources.food < costFood) {
+            state.addLog('Not enough supplies for a festival!', 'warning');
+            return;
+        }
+
+        set((state) => ({
+            resources: {
+                ...state.resources,
+                wood: state.resources.wood - costWood,
+                food: state.resources.food - costFood,
+            },
+            happiness: Math.min(100, state.happiness + 15),
+        }));
+        state.addLog('You held a lively festival! Happiness soared.', 'success');
+      },
+
+      sendExpedition: () => {
+        const state = get();
+        const costFood = 25;
+        const costWood = 15;
+
+        if (state.resources.food < costFood || state.resources.wood < costWood) {
+            state.addLog('Not enough supplies to send an expedition.', 'warning');
+            return;
+        }
+
+        // Deduct supplies
+        set((state) => ({
+            resources: {
+                ...state.resources,
+                food: state.resources.food - costFood,
+                wood: state.resources.wood - costWood,
+            },
+        }));
+
+        const watchtowers = state.buildings.filter(b => b.type === 'watchtower').length;
+        const luck = Math.random() + watchtowers * 0.05;
+
+        if (luck > 0.65) {
+            // Big success: gain resources + maybe a settler
+            const woodGain = 40 + Math.round(Math.random() * 40);
+            const foodGain = 30 + Math.round(Math.random() * 30);
+            const stoneGain = Math.round(Math.random() * 30);
+            set((state) => ({
+                resources: {
+                    ...state.resources,
+                    wood: state.resources.wood + woodGain,
+                    food: state.resources.food + foodGain,
+                    stone: state.resources.stone + stoneGain,
+                },
+                settlers: Math.random() > 0.6 ? [
+                    ...state.settlers,
+                    {
+                        id: generateId(),
+                        name: `Scout ${state.settlers.length + 1}`,
+                        position: [0, 0, 0],
+                        targetPosition: null,
+                        state: 'idle',
+                        actionTimer: 0
+                    }
+                ] : state.settlers,
+            }));
+            state.addLog(`Expedition returned with riches! +${woodGain} wood, +${foodGain} food${stoneGain ? `, +${stoneGain} stone` : ''}`, 'success');
+        } else if (luck > 0.35) {
+            const ironGain = 5 + Math.round(Math.random() * 10);
+            set((state) => ({
+                resources: {
+                    ...state.resources,
+                    iron: state.resources.iron + ironGain,
+                }
+            }));
+            state.addLog(`Expedition found rare iron veins! +${ironGain} iron`, 'info');
+        } else {
+            // Failure
+            const penalty = Math.max(5, Math.round(state.resources.wood * 0.05));
+            set((state) => ({
+                resources: {
+                    ...state.resources,
+                    wood: Math.max(0, state.resources.wood - penalty),
+                },
+                happiness: Math.max(0, state.happiness - 5),
+            }));
+            state.addLog('Expedition ran into trouble and limped home. Lost some supplies.', 'danger');
+        }
+      },
+
+      claimObjective: (id: string) => {
+        const state = get();
+        const objective = state.objectives.find(o => o.id === id);
+        if (!objective || !objective.complete || objective.claimed) return;
+
+        set((state) => ({
+            resources: {
+                ...state.resources,
+                wood: state.resources.wood + (objective.reward.wood || 0),
+                food: state.resources.food + (objective.reward.food || 0),
+                stone: state.resources.stone + (objective.reward.stone || 0),
+                iron: state.resources.iron + (objective.reward.iron || 0),
+            },
+            objectives: state.objectives.map(o => o.id === id ? { ...o, claimed: true } : o),
+        }));
+
+        state.addLog(`Claimed reward: ${objective.title}`, 'success');
+      },
+
       tick: () => {
         set((state) => {
           const newResources = { ...state.resources };
@@ -295,6 +443,8 @@ export const useGameStore = create<GameState>()(
           let newLogs: LogEntry[] = [...state.logs];
           const wellCount = state.buildings.filter(b => b.type === 'well').length;
           const bakeryCount = state.buildings.filter(b => b.type === 'bakery').length;
+          const campfireCount = state.buildings.filter(b => b.type === 'campfire').length;
+          const watchtowerCount = state.buildings.filter(b => b.type === 'watchtower').length;
 
           // Determine Season based on Day
           // Let's say a season is 10 days for gameplay pacing
@@ -330,7 +480,7 @@ export const useGameStore = create<GameState>()(
           let newHappiness = state.happiness;
           // Passive happiness from comfort buildings
           const comfortBoost = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].happiness || 0) * b.level, 0);
-          newHappiness = Math.min(100, newHappiness + comfortBoost);
+          newHappiness = Math.min(100, newHappiness + comfortBoost + campfireCount * 0.4);
 
           // Survival Mechanic: Food Consumption
           // Base consumption + cost per building (workers)
@@ -391,6 +541,7 @@ export const useGameStore = create<GameState>()(
                     // Apply Weather Modifiers
                     if (newSeason === 'winter') {
                         if (res === 'food') amount *= 0.2; // Winter is hard for farming
+                        if (building.type === 'fishery') amount *= 0.8; // Fishery better than farms in winter
                     }
                     if (newSeason === 'autumn') {
                          if (res === 'food') amount *= 1.5; // Harvest season
@@ -429,8 +580,8 @@ export const useGameStore = create<GameState>()(
           
           // Weather/Season Happiness Effects
           if (newWeather === 'rain' || newWeather === 'snow') {
-               const weatherPenalty = Math.max(0, 0.1 - (wellCount * 0.05));
-               newHappiness = Math.max(0, newHappiness - weatherPenalty); // Gloomy weather mitigated by wells
+               const weatherPenalty = Math.max(0, 0.1 - (wellCount * 0.05) - (campfireCount * 0.03));
+               newHappiness = Math.max(0, newHappiness - weatherPenalty); // Gloomy weather mitigated by wells/campfires
           }
           
           // Cap Happiness
@@ -448,7 +599,7 @@ export const useGameStore = create<GameState>()(
                   newLogs = [log, ...newLogs].slice(0, 20);
               } else if (roll < 0.66) {
                   const penalty = Math.max(5, Math.round(newResources.wood * 0.1));
-                  const mitigated = Math.max(0, penalty - wellCount * 3);
+                  const mitigated = Math.max(0, penalty - wellCount * 3 - watchtowerCount * 5);
                   newResources.wood = Math.max(0, newResources.wood - mitigated);
                   newHappiness = Math.max(0, newHappiness - 2);
                   const log: LogEntry = { id: generateId(), message: `A storm felled trees. Lost ${mitigated} wood, but wells reduced the damage.`, timestamp: Date.now(), type: 'warning' };
@@ -543,7 +694,21 @@ export const useGameStore = create<GameState>()(
             season: newSeason,
             day: state.day + 0.005,
             logs: newLogs,
-            tickRate: state.tickRate
+            tickRate: state.tickRate,
+            objectives: state.objectives.map((o) => {
+                if (o.complete) return o;
+                let met = false;
+                if (o.goal.type === 'resource' && o.goal.key && (o.goal.key as ResourceType in newResources)) {
+                    met = newResources[o.goal.key as ResourceType] >= o.goal.amount;
+                } else if (o.goal.type === 'building' && o.goal.key) {
+                    met = state.buildings.filter(b => b.type === (o.goal.key as BuildingType)).length >= o.goal.amount;
+                } else if (o.goal.type === 'population') {
+                    met = newSettlers.length >= o.goal.amount;
+                } else if (o.goal.type === 'happiness') {
+                    met = newHappiness >= o.goal.amount;
+                }
+                return met ? { ...o, complete: true } : o;
+            }),
           };
         });
       },
@@ -582,7 +747,8 @@ export const useGameStore = create<GameState>()(
             selectedBuildingId: null,
             isBuilding: false,
             day: 1,
-            tickRate: 1000
+            tickRate: 1000,
+            objectives: get().objectives.map(o => ({ ...o, complete: false, claimed: false })),
         });
       },
     }),
@@ -598,7 +764,8 @@ export const useGameStore = create<GameState>()(
         weather: state.weather,
         season: state.season,
         day: state.day,
-        tickRate: state.tickRate
+        tickRate: state.tickRate,
+        objectives: state.objectives,
       }), // only persist these fields
     }
   )
