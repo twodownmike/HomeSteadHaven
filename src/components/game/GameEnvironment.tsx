@@ -1,10 +1,10 @@
 import React, { useRef } from 'react';
-import { Sky, Stars, Environment, Sparkles } from '@react-three/drei';
+import { Sky, Stars, Environment, Sparkles, Cloud } from '@react-three/drei';
 import { useGameStore } from '../../store';
 import * as THREE from 'three';
 
 export const GameEnvironment: React.FC = () => {
-  const day = useGameStore((state) => state.day);
+  const { day, weather } = useGameStore();
   const directionalLightRef = useRef<THREE.DirectionalLight>(null);
 
   // Calculate time of day (0 to 1)
@@ -12,9 +12,6 @@ export const GameEnvironment: React.FC = () => {
   
   // Calculate sun position
   // 0.25 = Sunrise, 0.5 = Noon, 0.75 = Sunset, 0.0/1.0 = Midnight
-  // We want the sun to rotate around the X axis (East to West)
-  
-  // Using typical inclination
   const sunPosition: [number, number, number] = [
     Math.sin(timeOfDay * Math.PI * 2) * 100,
     Math.cos(timeOfDay * Math.PI * 2 + Math.PI) * 100, 
@@ -22,31 +19,39 @@ export const GameEnvironment: React.FC = () => {
   ];
 
   // Calculate light intensity based on sun height (Y)
-  // Max intensity at noon, 0 at night
   const sunHeight = sunPosition[1] / 100; // -1 to 1
-  const intensity = Math.max(0, sunHeight);
+  let intensity = Math.max(0, sunHeight);
+  
+  // Weather adjustments
+  if (weather !== 'sunny') {
+      intensity *= 0.5; // Darker when raining/snowing
+  }
+
   const ambientIntensity = Math.max(0.1, intensity * 0.5);
 
-  // Fog color changes based on time
-  const fogColor = intensity > 0.2 ? '#87CEEB' : '#050510';
+  // Fog color changes based on time and weather
+  let fogColor = intensity > 0.2 ? '#87CEEB' : '#050510';
+  if (weather === 'rain') fogColor = '#708090'; // SlateGray
+  if (weather === 'snow') fogColor = '#E0FFFF'; // LightCyan (foggy snow)
+  if (weather !== 'sunny' && intensity < 0.2) fogColor = '#050510'; // Night is still dark
 
   return (
     <>
       <Sky 
         sunPosition={sunPosition} 
-        turbidity={0.5} 
-        rayleigh={0.5 + (1 - intensity) * 0.5} // More scattering at sunset/sunrise
+        turbidity={weather !== 'sunny' ? 10 : 0.5} 
+        rayleigh={weather !== 'sunny' ? 0.1 : 0.5 + (1 - intensity) * 0.5} 
         mieCoefficient={0.005} 
         mieDirectionalG={0.7} 
       />
       
       {/* Stars appear at night */}
-      {intensity < 0.2 && (
+      {intensity < 0.2 && weather === 'sunny' && (
          <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       )}
 
-      {/* Fireflies/Sparkles at night */}
-      {intensity < 0.3 && (
+      {/* Fireflies/Sparkles at night (Clear weather only) */}
+      {intensity < 0.3 && weather === 'sunny' && (
         <Sparkles 
           count={100}
           scale={50}
@@ -58,9 +63,43 @@ export const GameEnvironment: React.FC = () => {
         />
       )}
 
-      <Environment preset="forest" background={false} />
+      {/* Rain Effect */}
+      {weather === 'rain' && (
+        <>
+            <Sparkles 
+                count={2000}
+                scale={[50, 20, 50]}
+                size={2}
+                speed={2} // Fast falling
+                opacity={0.6}
+                color="#aaaaaa"
+                position={[0, 10, 0]}
+            />
+            <Cloud position={[-10, 15, -10]} opacity={0.5} speed={0.2} />
+            <Cloud position={[10, 15, 10]} opacity={0.5} speed={0.2} />
+        </>
+      )}
+
+      {/* Snow Effect */}
+      {weather === 'snow' && (
+        <>
+            <Sparkles 
+                count={2000}
+                scale={[50, 20, 50]}
+                size={4}
+                speed={0.5} // Slow falling
+                opacity={0.8}
+                color="#ffffff"
+                position={[0, 10, 0]}
+            />
+            <Cloud position={[-10, 15, -10]} opacity={0.3} speed={0.1} color="#ffffff" />
+            <Cloud position={[10, 15, 10]} opacity={0.3} speed={0.1} color="#ffffff" />
+        </>
+      )}
+
+      <Environment preset={weather === 'sunny' ? "forest" : "city"} background={false} />
       
-      <ambientLight intensity={ambientIntensity} color={intensity < 0.2 ? "#1a1a2e" : "#ffffff"} />
+      <ambientLight intensity={ambientIntensity} color={weather === 'snow' ? "#E0FFFF" : (intensity < 0.2 ? "#1a1a2e" : "#ffffff")} />
       
       <directionalLight 
         ref={directionalLightRef}

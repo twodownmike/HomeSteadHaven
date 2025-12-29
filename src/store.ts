@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS, LogEntry, WeatherType } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -32,6 +32,7 @@ export const useGameStore = create<GameState>()(
         return items;
       })(),
       logs: [],
+      weather: 'sunny',
       selectedBuilding: null,
       selectedBuildingId: null,
       isBuilding: false,
@@ -51,12 +52,21 @@ export const useGameStore = create<GameState>()(
       },
 
       addResource: (type: ResourceType, amount: number) =>
-        set((state) => ({
-          resources: {
-            ...state.resources,
-            [type]: state.resources[type] + amount,
-          },
-        })),
+        set((state) => {
+            const baseStorage = 100;
+            const additionalStorage = state.buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
+            const maxStorage = baseStorage + additionalStorage;
+            
+            const currentAmount = state.resources[type];
+            const newAmount = Math.min(currentAmount + amount, maxStorage);
+            
+            return {
+                resources: {
+                    ...state.resources,
+                    [type]: newAmount,
+                },
+            };
+        }),
 
       removeResource: (type: ResourceType, amount: number) => {
         const state = get();
@@ -215,11 +225,29 @@ export const useGameStore = create<GameState>()(
         set((state) => {
           const newResources = { ...state.resources };
           let newPopulation = state.population;
+          let newWeather = state.weather;
+          let newLogs = [...state.logs];
+
+          // Weather Change (1% chance)
+          if (Math.random() < 0.01) {
+              const types: WeatherType[] = ['sunny', 'rain', 'snow'];
+              // Simple weighted probability or just random
+              // Let's bias slightly towards sunny
+              const r = Math.random();
+              if (r < 0.6) newWeather = 'sunny';
+              else if (r < 0.85) newWeather = 'rain';
+              else newWeather = 'snow';
+
+              if (newWeather !== state.weather) {
+                  const log: LogEntry = { id: generateId(), message: `Weather changed to ${newWeather}!`, timestamp: Date.now(), type: 'info' };
+                  newLogs = [log, ...newLogs].slice(0, 20);
+              }
+          }
           
-          // Calculate Housing
-          const baseHousing = 2;
-          const additionalHousing = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].housing || 0), 0);
-          const totalHousing = baseHousing + additionalHousing;
+          // Calculate Storage
+          const baseStorage = 100;
+          const additionalStorage = state.buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
+          const maxStorage = baseStorage + additionalStorage;
           
           // Survival Mechanic: Food Consumption
           // Base consumption + cost per building (workers)
@@ -229,7 +257,7 @@ export const useGameStore = create<GameState>()(
             newResources.food -= consumption;
             
             // Growth: If food is abundant (> 2x consumption) and housing available, chance to grow
-            if (newResources.food > consumption * 2 && newPopulation < totalHousing) {
+            if (newResources.food > consumption * 2 && newPopulation < state.population + state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].housing || 0), 2)) {
                 if (Math.random() < 0.05) { // 5% chance per tick to grow
                     newPopulation += 1;
                 }
@@ -249,8 +277,17 @@ export const useGameStore = create<GameState>()(
                 (Object.keys(production) as ResourceType[]).forEach((res) => {
                     // Apply efficiency based on workforce
                     // Also scale by building level
-                    const amount = (production[res] || 0) * efficiency * building.level;
-                    newResources[res] += amount;
+                    let amount = (production[res] || 0) * efficiency * building.level;
+                    
+                    // Apply Weather Modifiers
+                    if (newWeather === 'rain') {
+                        if (res === 'food') amount *= 1.2; // +20% Food
+                    } else if (newWeather === 'snow') {
+                        if (res === 'food') amount *= 0.5; // -50% Food
+                    }
+
+                    // Cap at maxStorage
+                    newResources[res] = Math.min(newResources[res] + amount, maxStorage);
                 });
                 }
             });
@@ -263,7 +300,6 @@ export const useGameStore = create<GameState>()(
           }
           
           // Let's handle log updates for population changes here manually by appending to logs
-          let newLogs = [...state.logs];
           if (newPopulation > state.population) {
               const log: LogEntry = { id: generateId(), message: "A new settler arrived!", timestamp: Date.now(), type: 'success' as LogEntry['type'] };
               newLogs = [log, ...newLogs].slice(0, 20);
@@ -275,6 +311,7 @@ export const useGameStore = create<GameState>()(
           return {
             resources: newResources,
             population: newPopulation,
+            weather: newWeather,
             day: state.day + 0.005,
             logs: newLogs
           };
@@ -305,6 +342,7 @@ export const useGameStore = create<GameState>()(
             buildings: [],
             nature: items,
             logs: [],
+            weather: 'sunny',
             selectedBuilding: null,
             selectedBuildingId: null,
             isBuilding: false,
@@ -320,6 +358,7 @@ export const useGameStore = create<GameState>()(
         buildings: state.buildings, 
         nature: state.nature,
         logs: state.logs,
+        weather: state.weather,
         day: state.day 
       }), // only persist these fields
     }

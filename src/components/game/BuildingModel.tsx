@@ -20,6 +20,7 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
       case 'farm': return '#DAA520'; // GoldenRod
       case 'lumberMill': return '#556B2F'; // DarkOliveGreen
       case 'mine': return '#696969'; // DimGray
+      case 'warehouse': return '#A0522D'; // Sienna
       default: return '#ffffff';
     }
   }, [type, ghost, isValid]);

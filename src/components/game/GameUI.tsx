@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store';
-import { BuildingType, BUILDING_COSTS, ResourceType } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users } from 'lucide-react';
+import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS } from '../../types';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake } from 'lucide-react';
 
 const ResourceIcon = ({ type }: { type: ResourceType }) => {
   switch (type) {
@@ -16,6 +16,7 @@ export const GameUI: React.FC = () => {
   const { 
     resources, 
     population,
+    weather,
     isBuilding, 
     selectedBuilding, 
     setSelectedBuilding, 
@@ -54,6 +55,11 @@ export const GameUI: React.FC = () => {
       return resources[type] >= (upgradeCost[type] || 0) * upgradeMultiplier;
   });
 
+  // Calculate Max Storage
+  const baseStorage = 100;
+  const additionalStorage = buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
+  const maxStorage = baseStorage + additionalStorage;
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4">
       {/* Top HUD: Resources */}
@@ -66,10 +72,21 @@ export const GameUI: React.FC = () => {
                         <ResourceIcon type={key as ResourceType} />
                         <div className="flex flex-col">
                             <span className="text-xs uppercase opacity-60 font-bold tracking-wider">{key}</span>
-                            <span className="font-mono font-bold">{Math.floor(value)}</span>
+                            <span className={`font-mono font-bold ${value >= maxStorage ? 'text-red-400' : ''}`}>
+                                {Math.floor(value)}
+                            </span>
                         </div>
                     </div>
                 ))}
+                
+                {/* Storage Indicator */}
+                <div className="border-l border-white/10 pl-4 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-gray-400" />
+                    <div className="flex flex-col">
+                        <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Cap</span>
+                        <span className="font-mono font-bold text-gray-300">{maxStorage}</span>
+                    </div>
+                </div>
             </div>
 
             {/* Population */}

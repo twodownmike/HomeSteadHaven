@@ -7,7 +7,7 @@ export interface Resources {
   iron: number;
 }
 
-export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill';
+export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse';
 
 export interface Building {
   id: string;
@@ -18,6 +18,8 @@ export interface Building {
 }
 
 export type NatureType = 'tree' | 'rock';
+
+export type WeatherType = 'sunny' | 'rain' | 'snow';
 
 export interface NatureItem {
   id: string;
@@ -39,6 +41,7 @@ export interface GameState {
   buildings: Building[];
   nature: NatureItem[];
   logs: LogEntry[];
+  weather: WeatherType;
   selectedBuilding: BuildingType | null; // For placement
   selectedBuildingId: string | null; // For inspecting existing building
   isBuilding: boolean;
@@ -63,13 +66,15 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   farm: { wood: 20, stone: 5 },
   lumberMill: { wood: 50, stone: 10 },
   mine: { wood: 100, stone: 50 },
+  warehouse: { wood: 100, stone: 20 },
 };
 
-export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number }> = {
+export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number }> = {
   cabin: { housing: 4 },
   farm: { workers: 1 },
   lumberMill: { workers: 2 },
   mine: { workers: 3 },
+  warehouse: { storage: 200 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
@@ -77,4 +82,5 @@ export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
   farm: { food: 5 },
   lumberMill: { wood: 5 },
   mine: { stone: 2, iron: 1 },
+  warehouse: { },
 };
