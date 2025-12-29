@@ -16,8 +16,8 @@ export const useGameStore = create<GameState>()(
         iron: 0,
       },
       settlers: [
-          { id: 'settler-1', name: 'John', position: [0, 0, 0], targetPosition: null, state: 'idle', actionTimer: 0 },
-          { id: 'settler-2', name: 'Jane', position: [2, 0, 2], targetPosition: null, state: 'idle', actionTimer: 0 },
+          { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
+          { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
       ], 
       happiness: 100,
       buildings: [],
@@ -36,11 +36,12 @@ export const useGameStore = create<GameState>()(
         return items;
       })(),
       logs: [],
-      weather: 'sunny',
-      season: 'spring',
+      weather: 'sunny' as WeatherType,
+      season: 'spring' as Season,
       selectedBuilding: null,
       selectedBuildingId: null,
       isBuilding: false,
+      tickRate: 1000,
       day: 1,
 
       addLog: (message: string, type: LogEntry['type'] = 'info') => {
@@ -279,13 +280,20 @@ export const useGameStore = create<GameState>()(
       selectBuildingId: (id: string | null) =>
         set({ selectedBuildingId: id, selectedBuilding: null, isBuilding: false }),
 
+      setTickRate: (rateMs: number) => {
+        const clamped = Math.min(2000, Math.max(300, rateMs));
+        set({ tickRate: clamped });
+      },
+
       tick: () => {
         set((state) => {
           const newResources = { ...state.resources };
           let newSettlers = [...state.settlers];
           let newWeather = state.weather;
           let newSeason = state.season;
-          let newLogs = [...state.logs];
+          let newLogs: LogEntry[] = [...state.logs];
+          const wellCount = state.buildings.filter(b => b.type === 'well').length;
+          const bakeryCount = state.buildings.filter(b => b.type === 'bakery').length;
 
           // Determine Season based on Day
           // Let's say a season is 10 days for gameplay pacing
@@ -321,6 +329,9 @@ export const useGameStore = create<GameState>()(
           const maxStorage = baseStorage + additionalStorage;
           
           let newHappiness = state.happiness;
+          // Passive happiness from comfort buildings
+          const comfortBoost = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].happiness || 0) * b.level, 0);
+          newHappiness = Math.min(100, newHappiness + comfortBoost);
 
           // Survival Mechanic: Food Consumption
           // Base consumption + cost per building (workers)
@@ -391,6 +402,11 @@ export const useGameStore = create<GameState>()(
                 });
                 }
             });
+            
+            // Bakery gives a small morale boost when active
+            if (bakeryCount > 0) {
+                newHappiness = Math.min(100, newHappiness + 0.4 * bakeryCount);
+            }
           } else {
              // Starvation
              newResources.food = 0;
@@ -414,12 +430,37 @@ export const useGameStore = create<GameState>()(
           
           // Weather/Season Happiness Effects
           if (newWeather === 'rain' || newWeather === 'snow') {
-               newHappiness = Math.max(0, newHappiness - 0.1); // Gloomy weather
+               const weatherPenalty = Math.max(0, 0.1 - (wellCount * 0.05));
+               newHappiness = Math.max(0, newHappiness - weatherPenalty); // Gloomy weather mitigated by wells
           }
           
           // Cap Happiness
           newHappiness = Math.min(100, Math.max(0, newHappiness));
           
+          // Random world events for flavor
+          if (Math.random() < 0.008) {
+              const roll = Math.random();
+              if (roll < 0.33) {
+                  const lootWood = 20 + Math.round(Math.random() * 20);
+                  const lootFood = 10 + Math.round(Math.random() * 15);
+                  newResources.wood = Math.min(maxStorage, newResources.wood + lootWood);
+                  newResources.food = Math.min(maxStorage, newResources.food + lootFood);
+                  const log: LogEntry = { id: generateId(), message: `A wandering trader gifted ${lootWood} wood and ${lootFood} food!`, timestamp: Date.now(), type: 'success' };
+                  newLogs = [log, ...newLogs].slice(0, 20);
+              } else if (roll < 0.66) {
+                  const penalty = Math.max(5, Math.round(newResources.wood * 0.1));
+                  const mitigated = Math.max(0, penalty - wellCount * 3);
+                  newResources.wood = Math.max(0, newResources.wood - mitigated);
+                  newHappiness = Math.max(0, newHappiness - 2);
+                  const log: LogEntry = { id: generateId(), message: `A storm felled trees. Lost ${mitigated} wood, but wells reduced the damage.`, timestamp: Date.now(), type: 'warning' };
+                  newLogs = [log, ...newLogs].slice(0, 20);
+              } else {
+                  newHappiness = Math.min(100, newHappiness + 5 + wellCount);
+                  const log: LogEntry = { id: generateId(), message: `A village festival lifted everyone's spirits! (+Happiness)`, timestamp: Date.now(), type: 'success' };
+                  newLogs = [log, ...newLogs].slice(0, 20);
+              }
+          }
+
           // Update Settler Logic (Movement/AI)
           newSettlers = newSettlers.map(settler => {
               const timeOfDay = state.day % 1;
@@ -502,7 +543,8 @@ export const useGameStore = create<GameState>()(
             weather: newWeather,
             season: newSeason,
             day: state.day + 0.005,
-            logs: newLogs
+            logs: newLogs,
+            tickRate: state.tickRate
           };
         });
       },
@@ -528,19 +570,20 @@ export const useGameStore = create<GameState>()(
                 iron: 0,
             },
             settlers: [
-                { id: 'settler-1', name: 'John', position: [0, 0, 0], targetPosition: null, state: 'idle', actionTimer: 0 },
-                { id: 'settler-2', name: 'Jane', position: [2, 0, 2], targetPosition: null, state: 'idle', actionTimer: 0 },
+                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
+                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0 },
             ],
             happiness: 100,
             buildings: [],
             nature: items,
             logs: [],
-            weather: 'sunny',
-            season: 'spring',
+            weather: 'sunny' as WeatherType,
+            season: 'spring' as Season,
             selectedBuilding: null,
             selectedBuildingId: null,
             isBuilding: false,
             day: 1,
+            tickRate: 1000
         });
       },
     }),
@@ -555,7 +598,8 @@ export const useGameStore = create<GameState>()(
         logs: state.logs,
         weather: state.weather,
         season: state.season,
-        day: state.day 
+        day: state.day,
+        tickRate: state.tickRate
       }), // only persist these fields
     }
   )

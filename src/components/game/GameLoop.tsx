@@ -3,14 +3,15 @@ import { useGameStore } from '../../store';
 
 export const GameLoop = () => {
   const tick = useGameStore((state) => state.tick);
+  const tickRate = useGameStore((state) => state.tickRate);
 
   useEffect(() => {
     const interval = setInterval(() => {
       tick();
-    }, 1000); // 1 tick per second
+    }, tickRate);
 
     return () => clearInterval(interval);
-  }, [tick]);
+  }, [tick, tickRate]);
 
   return null;
 };

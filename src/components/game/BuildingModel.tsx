@@ -21,6 +21,8 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
       case 'lumberMill': return '#556B2F'; // DarkOliveGreen
       case 'mine': return '#696969'; // DimGray
       case 'warehouse': return '#A0522D'; // Sienna
+      case 'bakery': return '#d97706'; // Warm bread tone
+      case 'well': return '#3b82f6'; // Water blue
       default: return '#ffffff';
     }
   }, [type, ghost, isValid]);
@@ -58,6 +60,38 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
           <cylinderGeometry args={[0.8, 0.8, 2.2, 8]} />
           <meshStandardMaterial color="#DEB887" transparent={transparent} opacity={opacity} />
         </mesh>
+      )}
+
+      {/* Details for Bakery */}
+      {type === 'bakery' && (
+        <>
+          <mesh position={[0, 2.3, 0]} castShadow>
+            <cylinderGeometry args={[0.9, 0.9, 1.2, 12]} />
+            <meshStandardMaterial color="#fbbf24" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0.6, 2.9, 0]} castShadow>
+            <coneGeometry args={[0.4, 0.6, 6]} />
+            <meshStandardMaterial color="#7c2d12" transparent={transparent} opacity={opacity} />
+          </mesh>
+        </>
+      )}
+
+      {/* Details for Well */}
+      {type === 'well' && (
+        <>
+          <mesh position={[0, 1.1, 0]} castShadow>
+            <cylinderGeometry args={[0.9, 0.9, 1.2, 16]} />
+            <meshStandardMaterial color="#60a5fa" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 1.7, 0]} castShadow>
+            <torusGeometry args={[0.8, 0.12, 8, 24]} />
+            <meshStandardMaterial color="#1d4ed8" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0, 2.3, 0]} castShadow>
+            <cylinderGeometry args={[0.12, 0.12, 0.8, 8]} />
+            <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
+          </mesh>
+        </>
       )}
 
       {/* Selection Ring */}

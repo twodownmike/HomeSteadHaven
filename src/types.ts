@@ -7,7 +7,7 @@ export interface Resources {
   iron: number;
 }
 
-export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse';
+export type BuildingType = 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well';
 
 export interface Building {
   id: string;
@@ -60,6 +60,7 @@ export interface GameState {
   selectedBuilding: BuildingType | null; // For placement
   selectedBuildingId: string | null; // For inspecting existing building
   isBuilding: boolean;
+  tickRate: number;
   day: number;
   
   // Actions
@@ -74,6 +75,7 @@ export interface GameState {
   addLog: (message: string, type?: LogEntry['type']) => void;
   setSelectedBuilding: (type: BuildingType | null) => void;
   selectBuildingId: (id: string | null) => void;
+  setTickRate: (rateMs: number) => void;
   tick: () => void;
   reset: () => void;
 }
@@ -84,14 +86,18 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   lumberMill: { wood: 50, stone: 10 },
   mine: { wood: 100, stone: 50 },
   warehouse: { wood: 100, stone: 20 },
+  bakery: { wood: 60, stone: 20 },
+  well: { wood: 30, stone: 40 },
 };
 
-export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number }> = {
+export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number; happiness?: number }> = {
   cabin: { housing: 4 },
   farm: { workers: 1 },
   lumberMill: { workers: 2 },
   mine: { workers: 3 },
   warehouse: { storage: 200 },
+  bakery: { workers: 2, happiness: 0.4 },
+  well: { happiness: 0.6 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
@@ -100,4 +106,6 @@ export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
   lumberMill: { wood: 5 },
   mine: { stone: 2, iron: 1 },
   warehouse: { },
+  bakery: { food: 8 },
+  well: { },
 };

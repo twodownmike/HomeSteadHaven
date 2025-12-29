@@ -15,7 +15,8 @@ const ResourceIcon = ({ type }: { type: ResourceType }) => {
 export const GameUI: React.FC = () => {
   const { 
     resources, 
-    population,
+    settlers,
+    happiness,
     weather,
     isBuilding, 
     selectedBuilding, 
@@ -28,7 +29,9 @@ export const GameUI: React.FC = () => {
     selectBuildingId,
     upgradeBuilding,
     demolishBuilding,
-    logs
+    logs,
+    tickRate,
+    setTickRate
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -113,6 +116,19 @@ export const GameUI: React.FC = () => {
             <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
                 <div className="text-sm font-bold">Day {day.toFixed(1)}</div>
             </div>
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-2">
+                {weather === 'sunny' && <Sun className="w-4 h-4 text-yellow-300" />}
+                {weather === 'rain' && <CloudRain className="w-4 h-4 text-blue-300" />}
+                {weather === 'snow' && <Snowflake className="w-4 h-4 text-cyan-200" />}
+                <div className="flex flex-col leading-tight">
+                    <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Weather</span>
+                    <span className="font-mono font-bold capitalize">{weather}</span>
+                </div>
+            </div>
+            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl flex flex-col leading-tight">
+                <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Season</span>
+                <span className="font-mono font-bold capitalize">{season}</span>
+            </div>
             <button 
                 onClick={() => setShowSettings(!showSettings)}
                 className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl hover:bg-white/10 transition-colors"
@@ -126,6 +142,21 @@ export const GameUI: React.FC = () => {
       {showSettings && (
           <div className="absolute top-20 right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 text-white shadow-xl pointer-events-auto z-50 flex flex-col gap-2 min-w-[200px]">
               <h3 className="font-bold text-lg mb-2">Settings</h3>
+              <div className="flex flex-col gap-2">
+                  <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Game Speed</span>
+                  <div className="grid grid-cols-3 gap-2">
+                      {[1200, 800, 500].map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => setTickRate(rate)}
+                            className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${tickRate === rate ? 'bg-green-600/30 border-green-400 text-green-100' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                          >
+                            {Math.round(1000 / rate)}x
+                          </button>
+                      ))}
+                  </div>
+                  <div className="text-[11px] text-gray-400">Higher speeds update the world more frequently.</div>
+              </div>
               <button 
                 onClick={handleReset}
                 className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 px-4 py-2 rounded-lg transition-colors w-full text-left"
@@ -134,7 +165,7 @@ export const GameUI: React.FC = () => {
                   Reset Progress
               </button>
               <div className="text-xs text-gray-400 mt-2">
-                  v0.1.0 Alpha
+                  v0.2.0 Beta
               </div>
           </div>
       )}
