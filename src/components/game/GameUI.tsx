@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingType, BUILDING_COSTS, ResourceType } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users } from 'lucide-react';
 
 const ResourceIcon = ({ type }: { type: ResourceType }) => {
   switch (type) {
@@ -13,7 +13,20 @@ const ResourceIcon = ({ type }: { type: ResourceType }) => {
 };
 
 export const GameUI: React.FC = () => {
-  const { resources, isBuilding, selectedBuilding, setSelectedBuilding, day, reset } = useGameStore();
+  const { 
+    resources, 
+    population,
+    isBuilding, 
+    selectedBuilding, 
+    setSelectedBuilding, 
+    day, 
+    reset,
+    buildings,
+    selectedBuildingId,
+    selectBuildingId,
+    upgradeBuilding,
+    demolishBuilding
+  } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
 
   const handleBuildSelect = (type: BuildingType) => {
@@ -31,20 +44,41 @@ export const GameUI: React.FC = () => {
     }
   };
 
+  const selectedBuildingData = selectedBuildingId ? buildings.find(b => b.id === selectedBuildingId) : null;
+  const upgradeCost = selectedBuildingData ? BUILDING_COSTS[selectedBuildingData.type] : null;
+  const upgradeMultiplier = selectedBuildingData ? selectedBuildingData.level + 1 : 1;
+
+  const canAffordUpgrade = upgradeCost && Object.keys(upgradeCost).every(res => {
+      const type = res as ResourceType;
+      return resources[type] >= (upgradeCost[type] || 0) * upgradeMultiplier;
+  });
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4">
       {/* Top HUD: Resources */}
       <div className="flex justify-between items-start pointer-events-auto">
-        <div className="flex gap-4 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
-            {Object.entries(resources).map(([key, value]) => (
-                <div key={key} className="flex items-center gap-2 min-w-[80px]">
-                    <ResourceIcon type={key as ResourceType} />
-                    <div className="flex flex-col">
-                        <span className="text-xs uppercase opacity-60 font-bold tracking-wider">{key}</span>
-                        <span className="font-mono font-bold">{Math.floor(value)}</span>
+        <div className="flex gap-4">
+            {/* Resources */}
+            <div className="flex gap-4 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl">
+                {Object.entries(resources).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2 min-w-[80px]">
+                        <ResourceIcon type={key as ResourceType} />
+                        <div className="flex flex-col">
+                            <span className="text-xs uppercase opacity-60 font-bold tracking-wider">{key}</span>
+                            <span className="font-mono font-bold">{Math.floor(value)}</span>
+                        </div>
                     </div>
+                ))}
+            </div>
+
+            {/* Population */}
+            <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[80px]">
+                <Users className="w-4 h-4 text-blue-400" />
+                <div className="flex flex-col">
+                    <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Pop</span>
+                    <span className="font-mono font-bold">{Math.floor(population)}</span>
                 </div>
-            ))}
+            </div>
         </div>
 
         <div className="flex gap-2">
@@ -73,6 +107,57 @@ export const GameUI: React.FC = () => {
               </button>
               <div className="text-xs text-gray-400 mt-2">
                   v0.1.0 Alpha
+              </div>
+          </div>
+      )}
+
+      {/* Building Inspection Panel */}
+      {selectedBuildingData && (
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-40 min-w-[300px]">
+              <div className="flex justify-between items-start mb-4">
+                  <div>
+                      <h3 className="font-bold text-xl capitalize">{selectedBuildingData.type}</h3>
+                      <p className="text-gray-400 text-sm">Level {selectedBuildingData.level}</p>
+                  </div>
+                  <button onClick={() => selectBuildingId(null)} className="text-gray-400 hover:text-white">
+                      <X className="w-5 h-5" />
+                  </button>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                  <button 
+                      onClick={() => upgradeBuilding(selectedBuildingData.id)}
+                      disabled={!canAffordUpgrade}
+                      className={`
+                          flex items-center justify-between p-3 rounded-xl border border-white/10 transition-all
+                          ${canAffordUpgrade ? 'bg-green-600/20 hover:bg-green-600/40 border-green-500/50' : 'bg-gray-800/50 opacity-50 cursor-not-allowed'}
+                      `}
+                  >
+                      <div className="flex items-center gap-2">
+                          <ArrowUpCircle className="w-5 h-5 text-green-400" />
+                          <div className="text-left">
+                              <div className="font-bold">Upgrade</div>
+                              <div className="text-xs text-gray-300">Increases efficiency</div>
+                          </div>
+                      </div>
+                      
+                      {/* Upgrade Cost */}
+                      <div className="flex flex-col items-end text-xs">
+                          {upgradeCost && Object.entries(upgradeCost).map(([res, amount]) => (
+                              <div key={res} className={resources[res as ResourceType] < amount * upgradeMultiplier ? 'text-red-400' : 'text-gray-300'}>
+                                  {amount * upgradeMultiplier} {res.charAt(0).toUpperCase()}
+                              </div>
+                          ))}
+                      </div>
+                  </button>
+
+                  <button 
+                      onClick={() => demolishBuilding(selectedBuildingData.id)}
+                      className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 hover:bg-red-500/30 border border-red-500/30 text-red-200 transition-colors"
+                  >
+                      <Trash2 className="w-5 h-5" />
+                      Demolish Building
+                  </button>
               </div>
           </div>
       )}

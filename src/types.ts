@@ -17,10 +17,22 @@ export interface Building {
   lastCollected?: number;
 }
 
+export type NatureType = 'tree' | 'rock';
+
+export interface NatureItem {
+  id: string;
+  type: NatureType;
+  position: [number, number, number];
+  scale: number;
+}
+
 export interface GameState {
   resources: Resources;
+  population: number;
   buildings: Building[];
-  selectedBuilding: BuildingType | null;
+  nature: NatureItem[];
+  selectedBuilding: BuildingType | null; // For placement
+  selectedBuildingId: string | null; // For inspecting existing building
   isBuilding: boolean;
   day: number;
   
@@ -28,7 +40,11 @@ export interface GameState {
   addResource: (type: ResourceType, amount: number) => void;
   removeResource: (type: ResourceType, amount: number) => boolean;
   addBuilding: (type: BuildingType, position: [number, number, number]) => void;
+  upgradeBuilding: (id: string) => void;
+  demolishBuilding: (id: string) => void;
+  removeNature: (id: string) => void;
   setSelectedBuilding: (type: BuildingType | null) => void;
+  selectBuildingId: (id: string | null) => void;
   tick: () => void;
   reset: () => void;
 }
@@ -38,6 +54,13 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   farm: { wood: 20, stone: 5 },
   lumberMill: { wood: 50, stone: 10 },
   mine: { wood: 100, stone: 50 },
+};
+
+export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number }> = {
+  cabin: { housing: 4 },
+  farm: { workers: 1 },
+  lumberMill: { workers: 2 },
+  mine: { workers: 3 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, RESOURCE_GENERATION, NatureType, BUILDING_STATS } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -15,8 +15,24 @@ export const useGameStore = create<GameState>()(
         stone: 0,
         iron: 0,
       },
+      population: 2, // Start with 2 settlers
       buildings: [],
+      nature: (() => {
+        // Initial nature generation
+        const items = [];
+        for (let i = 0; i < 40; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 15 + Math.random() * 30; // Outside the immediate center
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const type: NatureType = Math.random() > 0.3 ? 'tree' : 'rock';
+            const scale = 0.8 + Math.random() * 0.5;
+            items.push({ id: `nature-${i}`, position: [x, 0, z] as [number, number, number], type, scale });
+        }
+        return items;
+      })(),
       selectedBuilding: null,
+      selectedBuildingId: null,
       isBuilding: false,
       day: 1,
 
@@ -42,17 +58,52 @@ export const useGameStore = create<GameState>()(
         return false;
       },
 
+      removeNature: (id: string) => 
+        set((state) => ({
+            nature: state.nature.filter((item) => item.id !== id)
+        })),
+
       addBuilding: (type: BuildingType, position: [number, number, number]) => {
         const state = get();
-        const cost = BUILDING_COSTS[type];
         
-        // Check if can afford
+        // Validate collision again (server-side validation style)
+        const buildingCollision = state.buildings.some(b => 
+            b.position[0] === position[0] && b.position[2] === position[2]
+        );
+        
+        const minX = position[0] - 0.8;
+        const maxX = position[0] + 0.8;
+        const minZ = position[2] - 0.8;
+        const maxZ = position[2] + 0.8;
+
+        const natureCollision = state.nature.some(n => 
+            n.position[0] > minX && n.position[0] < maxX &&
+            n.position[2] > minZ && n.position[2] < maxZ
+        );
+
+        if (buildingCollision || natureCollision) {
+            return; // Failed to build
+        }
+
+        const cost = BUILDING_COSTS[type];
+        const stats = BUILDING_STATS[type];
+        
+        // Check if can afford resources
         let canAfford = true;
         (Object.keys(cost) as ResourceType[]).forEach((res) => {
           if ((state.resources[res] || 0) < (cost[res] || 0)) {
             canAfford = false;
           }
         });
+
+        // Check if has enough workers (if workers required)
+        if (stats.workers) {
+            // Calculate current employed
+            const employed = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].workers || 0), 0);
+            if (state.population - employed < stats.workers) {
+                canAfford = false;
+            }
+        }
 
         if (canAfford) {
           // Deduct resources
@@ -78,42 +129,124 @@ export const useGameStore = create<GameState>()(
         }
       },
 
+      upgradeBuilding: (id: string) => {
+        const state = get();
+        const building = state.buildings.find(b => b.id === id);
+        if (!building) return;
+        
+        const baseCost = BUILDING_COSTS[building.type];
+        // Upgrade cost scales with level: base * (level + 1)
+        const multiplier = building.level + 1;
+        
+        let canAfford = true;
+        (Object.keys(baseCost) as ResourceType[]).forEach((res) => {
+             const costAmount = (baseCost[res] || 0) * multiplier;
+             if ((state.resources[res] || 0) < costAmount) {
+                 canAfford = false;
+             }
+        });
+        
+        if (canAfford) {
+             (Object.keys(baseCost) as ResourceType[]).forEach((res) => {
+                 const costAmount = (baseCost[res] || 0) * multiplier;
+                 state.removeResource(res, costAmount);
+             });
+             
+             set((state) => ({
+                 buildings: state.buildings.map(b => 
+                     b.id === id ? { ...b, level: b.level + 1 } : b
+                 )
+             }));
+        }
+      },
+
+      demolishBuilding: (id: string) => {
+          set((state) => ({
+              buildings: state.buildings.filter(b => b.id !== id),
+              selectedBuildingId: null
+          }));
+          // Optional: Refund some resources? For now, no refunds (hardcore mode!)
+      },
+
       setSelectedBuilding: (type: BuildingType | null) =>
-        set({ selectedBuilding: type, isBuilding: !!type }),
+        set({ selectedBuilding: type, isBuilding: !!type, selectedBuildingId: null }),
+
+      selectBuildingId: (id: string | null) =>
+        set({ selectedBuildingId: id, selectedBuilding: null, isBuilding: false }),
 
       tick: () => {
         set((state) => {
           const newResources = { ...state.resources };
+          let newPopulation = state.population;
+          
+          // Calculate Housing
+          const baseHousing = 2;
+          const additionalHousing = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].housing || 0), 0);
+          const totalHousing = baseHousing + additionalHousing;
           
           // Survival Mechanic: Food Consumption
           // Base consumption + cost per building (workers)
-          const consumption = 0.5 + (state.buildings.length * 0.2);
+          const consumption = 0.5 + (state.population * 0.5); // 0.5 food per person
           
           if (newResources.food >= consumption) {
             newResources.food -= consumption;
             
-            // Calculate production from buildings (only if fed)
+            // Growth: If food is abundant (> 2x consumption) and housing available, chance to grow
+            if (newResources.food > consumption * 2 && newPopulation < totalHousing) {
+                if (Math.random() < 0.05) { // 5% chance per tick to grow
+                    newPopulation += 1;
+                }
+            }
+
+            // Calculate production from buildings (only if fed and staffed)
+            // For simplicity, we assume if we are fed, we work. 
+            // Check if we have enough workers for ALL buildings?
+            // Or just reduce production proportional to missing workers?
+            
+            const totalWorkersNeeded = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].workers || 0), 0);
+            const efficiency = totalWorkersNeeded > 0 ? Math.min(1, state.population / totalWorkersNeeded) : 1;
+            
             state.buildings.forEach((building) => {
                 const production = RESOURCE_GENERATION[building.type];
                 if (production) {
                 (Object.keys(production) as ResourceType[]).forEach((res) => {
-                    newResources[res] += (production[res] || 0);
+                    // Apply efficiency based on workforce
+                    // Also scale by building level
+                    const amount = (production[res] || 0) * efficiency * building.level;
+                    newResources[res] += amount;
                 });
                 }
             });
           } else {
              // Starvation: No production, food stays at 0
              newResources.food = 0;
+             // Chance to die if starving
+             if (Math.random() < 0.1 && newPopulation > 1) {
+                 newPopulation -= 1;
+             }
           }
 
           return {
             resources: newResources,
+            population: newPopulation,
             day: state.day + 0.005 // Increment day slowly (slower than before for day/night cycle)
           };
         });
       },
 
       reset: () => {
+        // Regenerate nature on reset
+        const items = [];
+        for (let i = 0; i < 40; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 15 + Math.random() * 30;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const type: NatureType = Math.random() > 0.3 ? 'tree' : 'rock';
+            const scale = 0.8 + Math.random() * 0.5;
+            items.push({ id: `nature-${i}`, position: [x, 0, z] as [number, number, number], type, scale });
+        }
+
         set({
             resources: {
                 wood: 100,
@@ -121,8 +254,11 @@ export const useGameStore = create<GameState>()(
                 stone: 0,
                 iron: 0,
             },
+            population: 2,
             buildings: [],
+            nature: items,
             selectedBuilding: null,
+            selectedBuildingId: null,
             isBuilding: false,
             day: 1,
         });
@@ -132,7 +268,9 @@ export const useGameStore = create<GameState>()(
       name: 'homestead-storage', // name of the item in the storage (must be unique)
       partialize: (state) => ({ 
         resources: state.resources, 
+        population: state.population,
         buildings: state.buildings, 
+        nature: state.nature,
         day: state.day 
       }), // only persist these fields
     }

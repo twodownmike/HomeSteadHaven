@@ -1,21 +1,30 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../../store';
 import { Html } from '@react-three/drei';
 
 interface TreeProps {
+  id: string;
   position: [number, number, number];
   scale?: number;
 }
 
-export const Tree: React.FC<TreeProps> = ({ position, scale = 1 }) => {
-  const addResource = useGameStore((state) => state.addResource);
+export const Tree: React.FC<TreeProps> = ({ id, position, scale = 1 }) => {
+  const { addResource, removeNature, isBuilding } = useGameStore();
   const [hovered, setHovered] = useState(false);
   const [lastGathered, setLastGathered] = useState(0);
+  const [clicks, setClicks] = useState(0);
 
   const handleClick = (e: any) => {
     e.stopPropagation();
     addResource('wood', 10);
     setLastGathered(Date.now());
+    
+    const newClicks = clicks + 1;
+    setClicks(newClicks);
+    
+    if (newClicks >= 5) {
+        removeNature(id);
+    }
   };
 
   return (
@@ -41,10 +50,11 @@ export const Tree: React.FC<TreeProps> = ({ position, scale = 1 }) => {
         <meshStandardMaterial color={hovered ? "#2e8b2e" : "#228B22"} />
       </mesh>
       
-      {hovered && (
+      {hovered && !isBuilding && (
          <Html position={[0, 4, 0]} center distanceFactor={10}>
-            <div className="bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm whitespace-nowrap pointer-events-none">
-               Click to Gather Wood
+            <div className="bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm whitespace-nowrap pointer-events-none flex flex-col items-center">
+               <span>Gather Wood (+10)</span>
+               <span className="text-[10px] text-gray-300">({5 - clicks} more to clear)</span>
             </div>
          </Html>
       )}
@@ -61,14 +71,16 @@ export const Tree: React.FC<TreeProps> = ({ position, scale = 1 }) => {
 };
 
 interface RockProps {
+  id: string;
   position: [number, number, number];
   scale?: number;
 }
 
-export const Rock: React.FC<RockProps> = ({ position, scale = 1 }) => {
-    const addResource = useGameStore((state) => state.addResource);
+export const Rock: React.FC<RockProps> = ({ id, position, scale = 1 }) => {
+    const { addResource, removeNature, isBuilding } = useGameStore();
     const [hovered, setHovered] = useState(false);
     const [lastGathered, setLastGathered] = useState(0);
+    const [clicks, setClicks] = useState(0);
 
     const handleClick = (e: any) => {
         e.stopPropagation();
@@ -77,6 +89,13 @@ export const Rock: React.FC<RockProps> = ({ position, scale = 1 }) => {
             addResource('iron', 2);
         }
         setLastGathered(Date.now());
+
+        const newClicks = clicks + 1;
+        setClicks(newClicks);
+        
+        if (newClicks >= 5) {
+            removeNature(id);
+        }
     };
 
     return (
@@ -93,10 +112,11 @@ export const Rock: React.FC<RockProps> = ({ position, scale = 1 }) => {
                 <meshStandardMaterial color={hovered ? "#909090" : "#808080"} flatShading />
             </mesh>
 
-            {hovered && (
+            {hovered && !isBuilding && (
                 <Html position={[0, 1.5, 0]} center distanceFactor={10}>
-                    <div className="bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm whitespace-nowrap pointer-events-none">
-                        Click to Gather Stone
+                    <div className="bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm whitespace-nowrap pointer-events-none flex flex-col items-center">
+                        <span>Gather Stone (+5)</span>
+                        <span className="text-[10px] text-gray-300">({5 - clicks} more to clear)</span>
                     </div>
                 </Html>
             )}
@@ -113,27 +133,14 @@ export const Rock: React.FC<RockProps> = ({ position, scale = 1 }) => {
 }
 
 export const EnvironmentProps: React.FC = () => {
-    // Generate random positions for trees and rocks, avoiding the center area
-    const items = useMemo(() => {
-        const _items = [];
-        for (let i = 0; i < 40; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const radius = 15 + Math.random() * 30; // Outside the immediate center
-            const x = Math.cos(angle) * radius;
-            const z = Math.sin(angle) * radius;
-            const type = Math.random() > 0.3 ? 'tree' : 'rock';
-            const scale = 0.8 + Math.random() * 0.5;
-            _items.push({ id: i, x, z, type, scale });
-        }
-        return _items;
-    }, []);
+    const natureItems = useGameStore((state) => state.nature);
 
     return (
         <group>
-            {items.map((item) => (
+            {natureItems.map((item) => (
                 item.type === 'tree' ? 
-                <Tree key={item.id} position={[item.x, 0, item.z]} scale={item.scale} /> :
-                <Rock key={item.id} position={[item.x, 0.4, item.z]} scale={item.scale} />
+                <Tree key={item.id} id={item.id} position={item.position} scale={item.scale} /> :
+                <Rock key={item.id} id={item.id} position={item.position} scale={item.scale} />
             ))}
         </group>
     );

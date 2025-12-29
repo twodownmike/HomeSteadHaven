@@ -4,12 +4,17 @@ import { Html } from '@react-three/drei';
 
 interface BuildingModelProps {
   type: BuildingType;
+  level?: number;
   selected?: boolean;
   ghost?: boolean;
+  isValid?: boolean;
+  onClick?: (e: any) => void;
 }
 
-export const BuildingModel: React.FC<BuildingModelProps> = ({ type, selected, ghost }) => {
+export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, selected, ghost, isValid = true, onClick }) => {
   const color = useMemo(() => {
+    if (ghost && !isValid) return '#ff0000'; // Red if invalid placement
+
     switch (type) {
       case 'cabin': return '#8B4513'; // SaddleBrown
       case 'farm': return '#DAA520'; // GoldenRod
@@ -17,13 +22,13 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, selected, gh
       case 'mine': return '#696969'; // DimGray
       default: return '#ffffff';
     }
-  }, [type]);
+  }, [type, ghost, isValid]);
 
   const opacity = ghost ? 0.5 : 1;
   const transparent = ghost;
 
   return (
-    <group>
+    <group onClick={onClick}>
       {/* Base */}
       <mesh position={[0, 1, 0]} castShadow receiveShadow>
         <boxGeometry args={[2, 2, 2]} />
@@ -66,7 +71,7 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, selected, gh
       {!ghost && (
          <Html position={[0, 3, 0]} center distanceFactor={15}>
             <div className="bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm whitespace-nowrap">
-               Lvl 1
+               Lvl {level}
             </div>
          </Html>
       )}

@@ -4,11 +4,34 @@ import { BuildingModel } from './BuildingModel';
 import { EnvironmentProps } from './Nature';
 
 export const Scene: React.FC = () => {
-  const { buildings, selectedBuilding, isBuilding, addBuilding } = useGameStore();
+  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding } = useGameStore();
   const [hoverPos, setHoverPos] = useState<[number, number, number] | null>(null);
+  const [isValidPlacement, setIsValidPlacement] = useState(true);
   
   // Grid size for snapping
   const GRID_SIZE = 2;
+
+  const checkCollision = (pos: [number, number, number]) => {
+    // Check collision with existing buildings
+    const buildingCollision = buildings.some(b => 
+        b.position[0] === pos[0] && b.position[2] === pos[2]
+    );
+    if (buildingCollision) return true;
+
+    // Check collision with nature
+    // Building is 2x2 centered at pos. Bounds: x +/- 1, z +/- 1
+    const minX = pos[0] - 0.8; // Give a little leeway so we don't collide with adjacent cells visually if nature is on edge
+    const maxX = pos[0] + 0.8;
+    const minZ = pos[2] - 0.8;
+    const maxZ = pos[2] + 0.8;
+
+    const natureCollision = nature.some(n => 
+        n.position[0] > minX && n.position[0] < maxX &&
+        n.position[2] > minZ && n.position[2] < maxZ
+    );
+    
+    return natureCollision;
+  };
 
   const handlePointerMove = (e: any) => {
     if (!isBuilding || !selectedBuilding) {
@@ -20,22 +43,35 @@ export const Scene: React.FC = () => {
     const x = Math.round(e.point.x / GRID_SIZE) * GRID_SIZE;
     const z = Math.round(e.point.z / GRID_SIZE) * GRID_SIZE;
     
+    const newPos: [number, number, number] = [x, 0, z];
+
     // Don't update if same to avoid re-renders
     if (!hoverPos || hoverPos[0] !== x || hoverPos[2] !== z) {
-        setHoverPos([x, 0, z]);
+        setHoverPos(newPos);
+        setIsValidPlacement(!checkCollision(newPos));
     }
   };
 
   const handleClick = (e: any) => {
-    // Prevent click propagation if we clicked a building (handled separately if needed)
     // For ground clicks:
     if (isBuilding && selectedBuilding && hoverPos) {
       e.stopPropagation();
-      addBuilding(selectedBuilding, hoverPos);
+      if (isValidPlacement) {
+          addBuilding(selectedBuilding, hoverPos);
+      }
     } else {
-        // Deselect if clicking ground
-        // setSelectedBuilding(null);
+        // Deselect if clicking ground and not clicking a building (buildings stop propagation)
+        // However, this click handler is on the ground mesh.
+        // If we click a building, it shouldn't reach here because we'll stop propagation in BuildingModel's click.
+        selectBuildingId(null);
+        setSelectedBuilding(null);
     }
+  };
+
+  const handleBuildingClick = (e: any, id: string) => {
+    if (isBuilding) return; // Don't select if trying to place
+    e.stopPropagation();
+    selectBuildingId(id);
   };
 
   return (
@@ -60,14 +96,19 @@ export const Scene: React.FC = () => {
       {/* Render Existing Buildings */}
       {buildings.map((building) => (
         <group key={building.id} position={building.position}>
-          <BuildingModel type={building.type} />
+          <BuildingModel 
+            type={building.type} 
+            level={building.level}
+            selected={selectedBuildingId === building.id}
+            onClick={(e) => handleBuildingClick(e, building.id)}
+          />
         </group>
       ))}
 
       {/* Render Ghost Building for placement */}
       {isBuilding && selectedBuilding && hoverPos && (
         <group position={hoverPos}>
-          <BuildingModel type={selectedBuilding} ghost />
+          <BuildingModel type={selectedBuilding} ghost isValid={isValidPlacement} />
         </group>
       )}
     </group>
