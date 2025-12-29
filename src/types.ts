@@ -66,6 +66,19 @@ export interface Objective {
   claimed: boolean;
 }
 
+export interface GameSaveData {
+  resources: Resources;
+  settlers: Settler[];
+  happiness: number;
+  buildings: Building[];
+  nature: NatureItem[];
+  logs: LogEntry[];
+  weather: WeatherType;
+  season: Season;
+  day: number;
+  objectives: Objective[];
+}
+
 export interface GameState {
   resources: Resources;
   settlers: Settler[];
@@ -98,6 +111,7 @@ export interface GameState {
   claimObjective: (id: string) => void;
   celebrateFestival: () => void;
   sendExpedition: () => void;
+  loadSaveData: (data: Partial<GameSaveData>) => void;
   tick: () => void;
   reset: () => void;
 }

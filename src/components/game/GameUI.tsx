@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2 } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, Users, Package, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut } from 'lucide-react';
+import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 const ResourceIcon = ({ type }: { type: ResourceType }) => {
   switch (type) {
@@ -30,6 +32,7 @@ export const GameUI: React.FC = () => {
     upgradeBuilding,
     demolishBuilding,
     logs,
+    nature,
     tickRate,
     setTickRate,
     objectives,
@@ -38,9 +41,14 @@ export const GameUI: React.FC = () => {
     sendExpedition,
     assignWorker,
     unassignWorker,
+    loadSaveData,
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
   const [showBuildMenu, setShowBuildMenu] = useState(false);
+  const [showObjectives, setShowObjectives] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSave, setIsLoadingSave] = useState(false);
 
   const handleBuildSelect = (type: BuildingType) => {
     if (selectedBuilding === type && isBuilding) {
@@ -116,6 +124,51 @@ export const GameUI: React.FC = () => {
 
   const workerCapacity = selectedStats?.workers || 0;
   const workerText = workerCapacity ? `${assignedWorkers}/${workerCapacity} workers` : 'No workers needed';
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u: User | null) => {
+      setUser(u);
+      if (u) {
+        setIsLoadingSave(true);
+        const save = await loadGameData(u.uid);
+        if (save) {
+          loadSaveData(save);
+        }
+        setIsLoadingSave(false);
+      }
+    });
+    return () => unsub();
+  }, [loadSaveData]);
+
+  const handleLogin = async () => {
+    await signInWithGoogle();
+  };
+
+  const handleLogout = async () => {
+    await signOutUser();
+    setUser(null);
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      await handleLogin();
+      return;
+    }
+    setIsSaving(true);
+    await saveGameData(user.uid, {
+      resources,
+      settlers,
+      happiness,
+      buildings,
+      nature,
+      logs,
+      weather,
+      season,
+      day,
+      objectives,
+    });
+    setIsSaving(false);
+  };
 
   const buildBenefits = useMemo(() => {
     const map: Record<BuildingType, string[]> = {} as Record<BuildingType, string[]>;
@@ -229,6 +282,39 @@ export const GameUI: React.FC = () => {
                 <Compass className="w-4 h-4" />
                 Expedition
               </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowObjectives((v) => !v)}
+                className={`px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${showObjectives ? 'bg-emerald-600/30 border-emerald-400 text-emerald-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
+              >
+                Objectives
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving || isLoadingSave}
+                className={`px-3 py-2 rounded-xl border text-sm font-semibold transition-colors flex items-center gap-2 ${isSaving ? 'bg-yellow-600/30 border-yellow-400 text-yellow-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              {user ? (
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-2 rounded-xl border border-white/10 text-sm font-semibold flex items-center gap-2 bg-white/10 hover:bg-white/20"
+                >
+                  <LogOut className="w-4 h-4" />
+                  {user.displayName || 'Logout'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleLogin}
+                  className="px-3 py-2 rounded-xl border border-white/10 text-sm font-semibold flex items-center gap-2 bg-white/5 hover:bg-white/10"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Sign in
+                </button>
+              )}
             </div>
             <button 
                 onClick={() => setShowSettings(!showSettings)}
@@ -372,6 +458,55 @@ export const GameUI: React.FC = () => {
         </div>
       )}
 
+      {/* Objectives Panel (top) */}
+      {showObjectives && (
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-4">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-300" />
+            <h3 className="text-lg font-bold">Objectives</h3>
+            {isLoadingSave && <span className="text-xs text-gray-300">Loading save...</span>}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            {objectives.map((obj) => {
+              const progress = objectiveProgress(obj);
+              const label = objectiveProgressLabel(obj);
+              const complete = obj.complete;
+              const claimed = obj.claimed;
+              return (
+                <div key={obj.id} className={`p-3 rounded-xl border ${complete ? 'border-green-400/40 bg-green-900/20' : 'border-white/10 bg-white/5'} shadow-inner`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-bold">{obj.title}</div>
+                      <div className="text-xs text-gray-300">{obj.description}</div>
+                    </div>
+                    {complete ? <CheckCircle2 className="w-5 h-5 text-green-300" /> : null}
+                  </div>
+                  <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className={`h-full ${complete ? 'bg-green-400' : 'bg-blue-400'}`} style={{ width: `${progress * 100}%` }} />
+                  </div>
+                  <div className="text-[11px] text-gray-300 mt-1">Progress: {label}</div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-1 text-xs text-amber-200">
+                      <Gift className="w-3 h-3" />
+                      {Object.entries(obj.reward).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
+                    </div>
+                    {complete && !claimed && (
+                      <button
+                        onClick={() => claimObjective(obj.id)}
+                        className="px-3 py-1 rounded-lg bg-green-600/60 hover:bg-green-600 text-sm font-semibold"
+                      >
+                        Claim
+                      </button>
+                    )}
+                    {claimed && <span className="text-green-300 text-xs">Claimed</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Bottom HUD */}
       <div className="pointer-events-none w-full px-4 pb-4 flex flex-col gap-3">
         {/* Build toggle & panel */}
@@ -439,51 +574,6 @@ export const GameUI: React.FC = () => {
           </div>
         )}
 
-        {/* Objectives */}
-        <div className="pointer-events-auto w-full max-w-4xl bg-black/60 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-300" />
-            <h3 className="text-lg font-bold">Objectives</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            {objectives.map((obj) => {
-              const progress = objectiveProgress(obj);
-              const label = objectiveProgressLabel(obj);
-              const complete = obj.complete;
-              const claimed = obj.claimed;
-              return (
-                <div key={obj.id} className={`p-3 rounded-xl border ${complete ? 'border-green-400/40 bg-green-900/20' : 'border-white/10 bg-white/5'} shadow-inner`}>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-bold">{obj.title}</div>
-                      <div className="text-xs text-gray-300">{obj.description}</div>
-                    </div>
-                    {complete ? <CheckCircle2 className="w-5 h-5 text-green-300" /> : null}
-                  </div>
-                  <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div className={`h-full ${complete ? 'bg-green-400' : 'bg-blue-400'}`} style={{ width: `${progress * 100}%` }} />
-                  </div>
-                  <div className="text-[11px] text-gray-300 mt-1">Progress: {label}</div>
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-1 text-xs text-amber-200">
-                      <Gift className="w-3 h-3" />
-                      {Object.entries(obj.reward).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
-                    </div>
-                    {complete && !claimed && (
-                      <button
-                        onClick={() => claimObjective(obj.id)}
-                        className="px-3 py-1 rounded-lg bg-green-600/60 hover:bg-green-600 text-sm font-semibold"
-                      >
-                        Claim
-                      </button>
-                    )}
-                    {claimed && <span className="text-green-300 text-xs">Claimed</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </div>
   );

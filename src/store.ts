@@ -434,6 +434,26 @@ export const useGameStore = create<GameState>()(
         state.addLog(`Claimed reward: ${objective.title}`, 'success');
       },
 
+      loadSaveData: (data) => {
+        const current = get();
+        set({
+          resources: data.resources || current.resources,
+          settlers: data.settlers || current.settlers,
+          happiness: data.happiness ?? current.happiness,
+          buildings: data.buildings || current.buildings,
+          nature: data.nature || current.nature,
+          logs: data.logs || current.logs,
+          weather: data.weather || current.weather,
+          season: data.season || current.season,
+          day: data.day ?? current.day,
+          objectives: data.objectives || current.objectives,
+          selectedBuilding: null,
+          selectedBuildingId: null,
+          isBuilding: false,
+        });
+        current.addLog('Loaded save data.', 'info');
+      },
+
       tick: () => {
         set((state) => {
           const newResources = { ...state.resources };
