@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -708,24 +708,47 @@ export const useGameStore = create<GameState>()(
             const isNight = timeOfDay > 0.75 || timeOfDay < 0.2;
             const isWorkTime = timeOfDay > 0.25 && timeOfDay < 0.7;
 
+
+            // Find home if not assigned
+            let settlerHomeId = settler.home;
+            if (!settlerHomeId) {
+                const availableHome = (state.buildings || []).find(b => {
+                    const stats = BUILDING_STATS[b.type];
+                    if (!stats.housing) return false;
+                    const occupants = (state.settlers || []).filter(s => s.home === b.id).length;
+                    return occupants < (stats.housing * b.level);
+                });
+                if (availableHome) settlerHomeId = availableHome.id;
+            }
+
             if (settler.job && isWorkTime) {
               const workplace = (state.buildings || []).find((b) => b.id === settler.job);
               if (workplace) {
-                const dist = Math.hypot(settler.position[0] - workplace.position[0], settler.position[2] - workplace.position[2]);
-                if (dist > 2) {
-                  return { ...settler, state: 'walking', targetPosition: workplace.position };
+                const stations = BUILDING_WORKSTATIONS[workplace.type] || [[0, 0, 0]];
+                const workerIndex = (state.settlers || []).filter(s => s.job === workplace.id).indexOf(settler);
+                const offset = stations[workerIndex % stations.length] || [0, 0, 0];
+                const targetPos: [number, number, number] = [
+                    workplace.position[0] + offset[0],
+                    workplace.position[1] + offset[1],
+                    workplace.position[2] + offset[2]
+                ];
+
+                const dist = Math.hypot(settler.position[0] - targetPos[0], settler.position[2] - targetPos[2]);
+                if (dist > 0.5) {
+                  return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: targetPos };
                 }
-                return { ...settler, state: 'working', targetPosition: null };
+                return { ...settler, home: settlerHomeId, state: 'working', targetPosition: null };
               }
             }
 
             if (isNight) {
-              const target: [number, number, number] = [0, 0, 0];
+              const home = (state.buildings || []).find(b => b.id === settlerHomeId) || (state.buildings || []).find(b => b.type === 'barn');
+              const target: [number, number, number] = home ? home.position : [0, 0, 0];
               const dist = Math.hypot(settler.position[0] - target[0], settler.position[2] - target[2]);
-              if (dist > 2) {
-                return { ...settler, state: 'walking', targetPosition: target };
+              if (dist > 0.5) {
+                return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: target };
               }
-              return { ...settler, state: 'resting', targetPosition: null };
+              return { ...settler, home: settlerHomeId, state: 'resting', targetPosition: null };
             }
 
             if (
@@ -733,14 +756,25 @@ export const useGameStore = create<GameState>()(
               (settler.state === 'working' && !isWorkTime) ||
               (settler.state === 'resting' && !isNight)
             ) {
+              // Idle wandering logic
               if (Math.random() < 0.02) {
+                // Try to visit a social spot (Campfire, Well)
+                const socialSpots = (state.buildings || []).filter(b => b.type === 'campfire' || b.type === 'well');
+                if (socialSpots.length > 0 && Math.random() < 0.5) {
+                    const spot = socialSpots[Math.floor(Math.random() * socialSpots.length)];
+                    const stations = BUILDING_WORKSTATIONS[spot.type] || [[0, 0, 0]];
+                    const offset = stations[Math.floor(Math.random() * stations.length)] || [0, 0, 0];
+                    return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: [spot.position[0] + offset[0], 0, spot.position[2] + offset[2]] };
+                }
+
+                // Or just wander nearby
                 const angle = Math.random() * Math.PI * 2;
                 const dist = 3 + Math.random() * 8;
                 const tx = Math.cos(angle) * dist;
                 const tz = Math.sin(angle) * dist;
-                return { ...settler, state: 'walking', targetPosition: [tx, 0, tz] };
+                return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: [tx, 0, tz] };
               }
-              return { ...settler, state: 'idle' };
+              return { ...settler, home: settlerHomeId, state: 'idle' };
             }
 
             if (settler.state === 'walking' && settler.targetPosition) {
@@ -751,7 +785,23 @@ export const useGameStore = create<GameState>()(
               if (settler.traits?.some(t => t.type === 'fast')) speed *= 1.5;
 
               if (dist < speed) {
-                return { ...settler, position: settler.targetPosition, targetPosition: null, state: 'idle' };
+                // Determine next state based on context
+                let nextState: 'idle' | 'working' | 'resting' = 'idle';
+                if (isWorkTime && settler.job) {
+                    const workplace = (state.buildings || []).find(b => b.id === settler.job);
+                    if (workplace) {
+                        const stations = BUILDING_WORKSTATIONS[workplace.type] || [[0, 0, 0]];
+                        const isAtStation = stations.some(s => 
+                            Math.hypot(settler.targetPosition![0] - (workplace.position[0] + s[0]), 
+                                       settler.targetPosition![2] - (workplace.position[2] + s[2])) < 0.1
+                        );
+                        if (isAtStation) nextState = 'working';
+                    }
+                } else if (isNight) {
+                    nextState = 'resting';
+                }
+
+                return { ...settler, position: settler.targetPosition, targetPosition: null, state: nextState };
               }
               return {
                 ...settler,

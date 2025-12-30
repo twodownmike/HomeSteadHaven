@@ -44,7 +44,7 @@ export const Scene: React.FC = () => {
     return natureCollision;
   };
 
-  const handlePointerMove = (e: any) => {
+  const handlePointerMove = (e: { point: THREE.Vector3 }) => {
     if (!isBuilding || !selectedBuilding) {
       if (hoverPos) setHoverPos(null);
       return;
@@ -63,7 +63,7 @@ export const Scene: React.FC = () => {
     }
   };
 
-  const handleClick = (e: any) => {
+  const handleClick = (e: { stopPropagation: () => void }) => {
     // For ground clicks:
     if (isBuilding && selectedBuilding && hoverPos) {
       e.stopPropagation();
@@ -79,7 +79,7 @@ export const Scene: React.FC = () => {
     }
   };
 
-  const handleBuildingClick = (e: any, id: string) => {
+  const handleBuildingClick = (e: { stopPropagation: () => void }, id: string) => {
     if (isBuilding) return; // Don't select if trying to place
     e.stopPropagation();
     selectBuildingId(id);
@@ -111,7 +111,7 @@ export const Scene: React.FC = () => {
             type={building.type} 
             level={building.level}
             selected={selectedBuildingId === building.id}
-            onClick={(e) => handleBuildingClick(e, building.id)}
+            onClick={(e: { stopPropagation: () => void }) => handleBuildingClick(e, building.id)}
           />
         </group>
       ))}

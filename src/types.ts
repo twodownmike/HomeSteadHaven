@@ -263,3 +263,20 @@ export const BUILDING_RESEARCH_REQ: Partial<Record<BuildingType, ResearchId>> = 
   workshop: 'toolmaking',
   infirmary: 'herbalism',
 };
+
+export const BUILDING_WORKSTATIONS: Record<BuildingType, [number, number, number][] | undefined> = {
+  barn: [[0, 0, 1.2]],
+  cabin: [],
+  farm: [[-1.2, 0, -1], [1.2, 0, 1], [-1.2, 0, 1], [1.2, 0, -1]],
+  lumberMill: [[0, 0, 1]],
+  mine: [[0.8, 0, 0.8]],
+  warehouse: [[0, 0, 1]],
+  bakery: [[0, 0, 1]],
+  well: [[0, 0, 0.8]],
+  campfire: [[1.5, 0, 0], [-1.5, 0, 0], [0, 0, 1.5], [0, 0, -1.5]],
+  watchtower: [[0, 4.2, 0]],
+  fishery: [[1.6, 0, 0]],
+  workshop: [[0, 0, 1]],
+  infirmary: [[0, 0, 1]],
+  tradingPost: [[0, 0, 1]],
+};

@@ -1,6 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { BuildingType } from '../../types';
 import { Html } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
+
+interface AnimalProps {
+  type: 'cow' | 'chicken';
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  ghost?: boolean;
+  opacity?: number;
+  transparent?: boolean;
+}
 
 interface BuildingModelProps {
   type: BuildingType;
@@ -10,6 +21,85 @@ interface BuildingModelProps {
   isValid?: boolean;
   onClick?: (e: any) => void;
 }
+
+const Animal: React.FC<AnimalProps> = ({ type, position, rotation = [0, 0, 0], ghost, opacity, transparent }) => {
+  const meshRef = useRef<THREE.Group>(null);
+  const headRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (ghost || !meshRef.current) return;
+    const t = state.clock.elapsedTime;
+    
+    // Gentle bobbing/breathing
+    meshRef.current.position.y = position[1] + Math.sin(t * (type === 'chicken' ? 4 : 1)) * 0.02;
+    
+    // Chicken pecking animation
+    if (type === 'chicken' && headRef.current) {
+        headRef.current.rotation.x = Math.sin(t * 8) > 0.8 ? 0.5 : 0;
+    }
+    
+    // Subtle wandering rotation
+    meshRef.current.rotation.y = rotation[1] + Math.sin(t * 0.5) * 0.1;
+  });
+
+  if (type === 'cow') {
+    return (
+      <group ref={meshRef} position={position} rotation={rotation}>
+        {/* Body */}
+        <mesh position={[0, 0.4, 0]} castShadow>
+          <boxGeometry args={[0.6, 0.4, 0.4]} />
+          <meshStandardMaterial color="#ffffff" transparent={transparent} opacity={opacity} />
+        </mesh>
+        {/* Spots */}
+        <mesh position={[0.1, 0.4, 0.21]}>
+          <boxGeometry args={[0.2, 0.2, 0.01]} />
+          <meshStandardMaterial color="#000000" transparent={transparent} opacity={opacity} />
+        </mesh>
+        <mesh position={[-0.15, 0.5, -0.21]}>
+          <boxGeometry args={[0.2, 0.2, 0.01]} />
+          <meshStandardMaterial color="#000000" transparent={transparent} opacity={opacity} />
+        </mesh>
+        {/* Head */}
+        <mesh position={[0.35, 0.5, 0]} castShadow>
+          <boxGeometry args={[0.25, 0.25, 0.2]} />
+          <meshStandardMaterial color="#ffffff" transparent={transparent} opacity={opacity} />
+        </mesh>
+        {/* Legs */}
+        {[[-0.2, 0.1, 0.15], [0.2, 0.1, 0.15], [-0.2, 0.1, -0.15], [0.2, 0.1, -0.15]].map((p, i) => (
+          <mesh key={i} position={p as [number, number, number]} castShadow>
+            <boxGeometry args={[0.1, 0.2, 0.1]} />
+            <meshStandardMaterial color="#ffffff" transparent={transparent} opacity={opacity} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  return (
+    <group ref={meshRef} position={position} rotation={rotation}>
+      {/* Body */}
+      <mesh position={[0, 0.15, 0]} castShadow>
+        <boxGeometry args={[0.2, 0.2, 0.15]} />
+        <meshStandardMaterial color="#ffffff" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Head */}
+      <mesh ref={headRef} position={[0.1, 0.25, 0]} castShadow>
+        <boxGeometry args={[0.1, 0.1, 0.08]} />
+        <meshStandardMaterial color="#ffffff" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Comb */}
+      <mesh position={[0.1, 0.32, 0]}>
+        <boxGeometry args={[0.05, 0.05, 0.02]} />
+        <meshStandardMaterial color="#ef4444" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Beak */}
+      <mesh position={[0.16, 0.24, 0]}>
+        <boxGeometry args={[0.04, 0.03, 0.03]} />
+        <meshStandardMaterial color="#fbbf24" transparent={transparent} opacity={opacity} />
+      </mesh>
+    </group>
+  );
+};
 
 export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, selected, ghost, isValid = true, onClick }) => {
   const color = useMemo(() => {
@@ -160,6 +250,14 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
               </mesh>
             );
           })}
+          {/* Animals */}
+          {!ghost && (
+            <>
+              <Animal type="cow" position={[-1, 0, -1]} rotation={[0, Math.PI / 4, 0]} opacity={opacity} transparent={transparent} />
+              <Animal type="chicken" position={[1, 0, 0.5]} rotation={[0, -Math.PI / 2, 0]} opacity={opacity} transparent={transparent} />
+              <Animal type="chicken" position={[0.5, 0, -0.8]} rotation={[0, Math.PI / 3, 0]} opacity={opacity} transparent={transparent} />
+            </>
+          )}
           {/* Barn shed */}
           <mesh position={[0, 1, 1.4]} castShadow>
             <boxGeometry args={[1.4, 1.2, 0.8]} />
