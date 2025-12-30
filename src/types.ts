@@ -190,6 +190,7 @@ export interface GameState {
   claimObjective: (id: string) => void;
   celebrateFestival: () => void;
   sendExpedition: () => void;
+  recruitSettler: () => void;
   startResearch: (id: ResearchId) => void;
   cancelResearch: () => void;
   acceptTrade: (offerId: string) => void;

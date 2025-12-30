@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { useGameStore } from '../../store';
+import { useGameStore, SETTLER_RECRUIT_COST } from '../../store';
 import { useAudioManager } from '../../hooks/useAudio';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE, ResearchId } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse, Zap, Utensils } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse, Zap, Utensils, UserPlus } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -67,6 +67,7 @@ export const GameUI: React.FC = () => {
     objectives,
     claimObjective,
     celebrateFestival,
+    recruitSettler,
     sendExpedition,
     assignWorker,
     unassignWorker,
@@ -185,6 +186,13 @@ export const GameUI: React.FC = () => {
 
   const workerCapacity = selectedStats?.workers || 0;
   const workerText = workerCapacity ? `${assignedWorkers}/${workerCapacity} workers` : 'No workers needed';
+  const housingCapacity = useMemo(() => (
+    (buildings || []).reduce((acc, b) => acc + ((BUILDING_STATS[b.type]?.housing || 0) * (b.level || 1)), 0)
+  ), [buildings]);
+  const hasHousingRoom = housingCapacity > (settlers?.length || 0);
+  const canRecruitSettler = hasHousingRoom && (Object.keys(SETTLER_RECRUIT_COST) as ResourceType[]).every(
+    (res) => (resources?.[res] || 0) >= (SETTLER_RECRUIT_COST[res] || 0)
+  );
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u: User | null) => {
@@ -362,6 +370,25 @@ export const GameUI: React.FC = () => {
               >
                 <Brain className="w-4 h-4 text-cyan-300" /> Research
               </motion.button>
+
+              <motion.button
+                whileHover={canRecruitSettler ? { x: 5 } : {}}
+                onClick={() => { playSound('click'); recruitSettler(); }}
+                disabled={!canRecruitSettler}
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 transition-colors ${
+                  canRecruitSettler ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-100' : 'bg-white/5 opacity-50 cursor-not-allowed'
+                }`}
+              >
+                <UserPlus className="w-4 h-4 text-emerald-300" />
+                Recruit Settler
+                <span className="ml-auto text-[11px] uppercase tracking-wide">
+                  {SETTLER_RECRUIT_COST.food}F / {SETTLER_RECRUIT_COST.wood}W
+                </span>
+              </motion.button>
+              <div className="flex items-center justify-between text-[11px] text-white/70 px-1">
+                <span>Housing {Math.min(settlers.length, housingCapacity)}/{housingCapacity || 0}</span>
+                {!hasHousingRoom && <span className="text-red-200">Build housing first</span>}
+              </div>
 
               <motion.button 
                 whileHover={canFestival ? { x: 5 } : {}}

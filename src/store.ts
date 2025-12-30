@@ -6,6 +6,11 @@ import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUIL
 // but I'll use a simple random string for now.
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+export const SETTLER_RECRUIT_COST: Partial<Record<ResourceType, number>> = {
+  food: 60,
+  wood: 40,
+};
+
 const generateTradeOffers = (day: number): TradeOffer[] => {
     const offers: TradeOffer[] = [];
     const count = 3;
@@ -30,6 +35,14 @@ const generateTradeOffers = (day: number): TradeOffer[] => {
         });
     }
     return offers;
+};
+
+const getHousingCapacity = (buildings: Building[] = []): number => {
+  return buildings.reduce((acc, b) => {
+    const stats = BUILDING_STATS[b.type];
+    if (!stats?.housing) return acc;
+    return acc + stats.housing * (b.level || 1);
+  }, 0);
 };
 
 const getRandomTraits = (): Trait[] => {
@@ -462,19 +475,79 @@ export const useGameStore = create<GameState>()(
         const costFood = 40;
 
         if (state.resources.wood < costWood || state.resources.food < costFood) {
-            state.addLog('Not enough supplies for a festival!', 'warning');
-            return;
+          state.addLog('Not enough supplies for a festival!', 'warning');
+          return;
         }
 
         set((state) => ({
-            resources: {
-                ...state.resources,
-                wood: state.resources.wood - costWood,
-                food: state.resources.food - costFood,
-            },
-            happiness: Math.min(100, state.happiness + 15),
+          resources: {
+            ...state.resources,
+            wood: state.resources.wood - costWood,
+            food: state.resources.food - costFood,
+          },
+          happiness: Math.min(100, state.happiness + 15),
         }));
         state.addLog('You held a lively festival! Happiness soared.', 'success');
+      },
+
+      recruitSettler: () => {
+        const state = get();
+        const housingCapacity = getHousingCapacity(state.buildings || []);
+        if ((state.settlers || []).length >= housingCapacity) {
+          state.addLog('Build more housing to welcome new settlers.', 'warning');
+          return;
+        }
+
+        const canAfford = (Object.keys(SETTLER_RECRUIT_COST) as ResourceType[]).every(
+          (res) => (state.resources[res] || 0) >= (SETTLER_RECRUIT_COST[res] || 0)
+        );
+        if (!canAfford) {
+          state.addLog('Not enough supplies to recruit a settler (40 Wood, 60 Food).', 'warning');
+          return;
+        }
+
+        const barn = (state.buildings || []).find((b) => b.type === 'barn');
+        const spawnPosition: [number, number, number] = barn
+          ? [
+              barn.position[0] + (Math.random() - 0.5) * 2,
+              barn.position[1],
+              barn.position[2] + (Math.random() - 0.5) * 2,
+            ]
+          : [0, 0, 0];
+
+        const newSettler: Settler = {
+          id: generateId(),
+          name: `Settler ${state.settlers.length + 1}`,
+          position: spawnPosition,
+          targetPosition: null,
+          state: 'idle',
+          actionTimer: 0,
+          hunger: 100,
+          energy: 100,
+          health: 100,
+          traits: getRandomTraits(),
+        };
+
+        set((prevState) => {
+          const updatedResources = { ...prevState.resources };
+          (Object.keys(SETTLER_RECRUIT_COST) as ResourceType[]).forEach((res) => {
+            updatedResources[res] = Math.max(
+              0,
+              updatedResources[res] - (SETTLER_RECRUIT_COST[res] || 0)
+            );
+          });
+          return {
+            resources: updatedResources,
+            settlers: [...prevState.settlers, newSettler],
+          };
+        });
+
+        state.addLog(`${newSettler.name} has joined your homestead!`, 'success');
+        get().addFloatingText(
+          '+1 Settler',
+          [spawnPosition[0], spawnPosition[1] + 2.5, spawnPosition[2]],
+          'text-emerald-300'
+        );
       },
 
       sendExpedition: () => {
