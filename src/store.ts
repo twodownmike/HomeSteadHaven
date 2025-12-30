@@ -730,21 +730,22 @@ export const useGameStore = create<GameState>()(
             const isNight = timeOfDay > 0.75 || timeOfDay < 0.2;
             const isWorkTime = timeOfDay > 0.25 && timeOfDay < 0.7;
 
+            let currentSettler = { ...settler };
 
             // Find home if not assigned
-            let settlerHomeId = settler.home;
-            if (!settlerHomeId) {
+            if (!currentSettler.home) {
                 const availableHome = (state.buildings || []).find(b => {
                     const stats = BUILDING_STATS[b.type];
                     if (!stats.housing) return false;
                     const occupants = (state.settlers || []).filter(s => s.home === b.id).length;
                     return occupants < (stats.housing * b.level);
                 });
-                if (availableHome) settlerHomeId = availableHome.id;
+                if (availableHome) currentSettler.home = availableHome.id;
             }
 
-            if (settler.job && isWorkTime) {
-              const workplace = (state.buildings || []).find((b) => b.id === settler.job);
+            // 1. Goal Determination
+            if (currentSettler.job && isWorkTime) {
+              const workplace = (state.buildings || []).find((b) => b.id === currentSettler.job);
               if (workplace) {
                 const stations = BUILDING_WORKSTATIONS[workplace.type] || [[0, 0, 0]];
                 const workerIndex = (state.settlers || []).filter(s => s.job === workplace.id).indexOf(settler);
@@ -755,118 +756,104 @@ export const useGameStore = create<GameState>()(
                     workplace.position[2] + offset[2]
                 ];
 
-                const dist = Math.hypot(settler.position[0] - targetPos[0], settler.position[2] - targetPos[2]);
+                const dist = Math.hypot(currentSettler.position[0] - targetPos[0], currentSettler.position[2] - targetPos[2]);
                 if (dist > 0.5) {
-                  return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: targetPos };
+                  currentSettler.state = 'walking';
+                  currentSettler.targetPosition = targetPos;
+                } else {
+                  currentSettler.state = 'working';
+                  currentSettler.targetPosition = null;
                 }
-                return { ...settler, home: settlerHomeId, state: 'working', targetPosition: null };
               }
-            }
-
-            if (isNight) {
-              const home = (state.buildings || []).find(b => b.id === settlerHomeId) || (state.buildings || []).find(b => b.type === 'barn');
+            } else if (isNight) {
+              const home = (state.buildings || []).find(b => b.id === currentSettler.home) || (state.buildings || []).find(b => b.type === 'barn');
               const target: [number, number, number] = home ? home.position : [0, 0, 0];
-              const dist = Math.hypot(settler.position[0] - target[0], settler.position[2] - target[2]);
+              const dist = Math.hypot(currentSettler.position[0] - target[0], currentSettler.position[2] - target[2]);
               if (dist > 0.5) {
-                return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: target };
+                currentSettler.state = 'walking';
+                currentSettler.targetPosition = target;
+              } else {
+                currentSettler.state = 'resting';
+                currentSettler.targetPosition = null;
               }
-              return { ...settler, home: settlerHomeId, state: 'resting', targetPosition: null };
-            }
-
-            if (
-              settler.state === 'idle' ||
-              (settler.state === 'working' && !isWorkTime) ||
-              (settler.state === 'resting' && !isNight)
+            } else if (
+              currentSettler.state === 'idle' ||
+              currentSettler.state === 'walking' ||
+              (currentSettler.state === 'working' && !isWorkTime) ||
+              (currentSettler.state === 'resting' && !isNight)
             ) {
               // Idle wandering logic
               if (Math.random() < 0.02) {
-                // Try to visit a social spot (Campfire, Well)
                 const socialSpots = (state.buildings || []).filter(b => b.type === 'campfire' || b.type === 'well');
                 if (socialSpots.length > 0 && Math.random() < 0.5) {
                     const spot = socialSpots[Math.floor(Math.random() * socialSpots.length)];
                     const stations = BUILDING_WORKSTATIONS[spot.type] || [[0, 0, 0]];
                     const offset = stations[Math.floor(Math.random() * stations.length)] || [0, 0, 0];
-                    return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: [spot.position[0] + offset[0], 0, spot.position[2] + offset[2]] };
+                    currentSettler.state = 'walking';
+                    currentSettler.targetPosition = [spot.position[0] + offset[0], 0, spot.position[2] + offset[2]];
+                } else {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 3 + Math.random() * 8;
+                    currentSettler.state = 'walking';
+                    currentSettler.targetPosition = [Math.cos(angle) * dist, 0, Math.sin(angle) * dist];
                 }
-
-                // Or just wander nearby
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 3 + Math.random() * 8;
-                const tx = Math.cos(angle) * dist;
-                const tz = Math.sin(angle) * dist;
-                return { ...settler, home: settlerHomeId, state: 'walking', targetPosition: [tx, 0, tz] };
+              } else if (currentSettler.state !== 'walking') {
+                currentSettler.state = 'idle';
               }
-              return { ...settler, home: settlerHomeId, state: 'idle' };
             }
 
-            if (settler.state === 'walking' && settler.targetPosition) {
-              const dx = settler.targetPosition[0] - settler.position[0];
-              const dz = settler.targetPosition[2] - settler.position[2];
+            // 2. Movement Execution
+            if (currentSettler.state === 'walking' && currentSettler.targetPosition) {
+              const dx = currentSettler.targetPosition[0] - currentSettler.position[0];
+              const dz = currentSettler.targetPosition[2] - currentSettler.position[2];
               const dist = Math.hypot(dx, dz);
               let speed = 0.08;
-              if (settler.traits?.some(t => t.type === 'fast')) speed *= 1.5;
+              if (currentSettler.traits?.some(t => t.type === 'fast')) speed *= 1.5;
 
               if (dist < speed) {
-                // Determine next state based on context
-                let nextState: 'idle' | 'working' | 'resting' = 'idle';
-                if (isWorkTime && settler.job) {
-                    const workplace = (state.buildings || []).find(b => b.id === settler.job);
-                    if (workplace) {
-                        const stations = BUILDING_WORKSTATIONS[workplace.type] || [[0, 0, 0]];
-                        const isAtStation = stations.some(s => 
-                            Math.hypot(settler.targetPosition![0] - (workplace.position[0] + s[0]), 
-                                       settler.targetPosition![2] - (workplace.position[2] + s[2])) < 0.1
-                        );
-                        if (isAtStation) nextState = 'working';
-                    }
-                } else if (isNight) {
-                    nextState = 'resting';
-                }
-
-                return { ...settler, position: settler.targetPosition, targetPosition: null, state: nextState };
-              }
-              return {
-                ...settler,
-                position: [
-                  settler.position[0] + (dx / dist) * speed,
+                currentSettler.position = currentSettler.targetPosition;
+                currentSettler.targetPosition = null;
+                if (isWorkTime && currentSettler.job) currentSettler.state = 'working';
+                else if (isNight) currentSettler.state = 'resting';
+                else currentSettler.state = 'idle';
+              } else {
+                currentSettler.position = [
+                  currentSettler.position[0] + (dx / dist) * speed,
                   0,
-                  settler.position[2] + (dz / dist) * speed,
-                ] as [number, number, number],
-              };
+                  currentSettler.position[2] + (dz / dist) * speed,
+                ];
+              }
             }
-            // Needs adjustments
+
+            // 3. Needs Update
             let hungerDrop = 0.1;
-            if (settler.traits?.some(t => t.type === 'glutton')) hungerDrop *= 1.5;
-            if (settler.traits?.some(t => t.type === 'ascetic')) hungerDrop *= 0.7;
+            if (currentSettler.traits?.some(t => t.type === 'glutton')) hungerDrop *= 1.5;
+            if (currentSettler.traits?.some(t => t.type === 'ascetic')) hungerDrop *= 0.7;
 
-            let hunger = Math.max(0, Math.min(100, settler.hunger - hungerDrop)); // gradual hunger drop
-            let energy = settler.energy;
-
-            if (settler.state === 'working' || settler.state === 'walking') {
+            currentSettler.hunger = Math.max(0, Math.min(100, currentSettler.hunger - hungerDrop));
+            
+            if (currentSettler.state === 'working' || currentSettler.state === 'walking') {
               let energyDrop = 0.2;
-              if (settler.traits?.some(t => t.type === 'strong')) energyDrop *= 0.6;
-              energy = Math.max(0, energy - energyDrop);
-            } else if (settler.state === 'resting') {
+              if (currentSettler.traits?.some(t => t.type === 'strong')) energyDrop *= 0.6;
+              currentSettler.energy = Math.max(0, currentSettler.energy - energyDrop);
+            } else if (currentSettler.state === 'resting') {
               let energyGain = 0.6;
-              if (settler.traits?.some(t => t.type === 'insomniac')) energyGain *= 1.5;
-              energy = Math.min(100, energy + energyGain);
-              hunger = Math.max(0, hunger - 0.05);
+              if (currentSettler.traits?.some(t => t.type === 'insomniac')) energyGain *= 1.5;
+              currentSettler.energy = Math.min(100, currentSettler.energy + energyGain);
+              currentSettler.hunger = Math.max(0, currentSettler.hunger - 0.05);
             } else {
-              energy = Math.min(100, energy + 0.1);
+              currentSettler.energy = Math.min(100, currentSettler.energy + 0.1);
             }
 
-            // Slight happiness influence from needs
-            if (hunger < 20) newHappiness = Math.max(0, newHappiness - 0.2);
-            if (energy < 20) newHappiness = Math.max(0, newHappiness - 0.1);
-            if (hunger > 70 && energy > 70) newHappiness = Math.min(100, newHappiness + 0.05);
+            if (currentSettler.hunger < 20) newHappiness = Math.max(0, newHappiness - 0.2);
+            if (currentSettler.energy < 20) newHappiness = Math.max(0, newHappiness - 0.1);
+            if (currentSettler.hunger > 70 && currentSettler.energy > 70) newHappiness = Math.min(100, newHappiness + 0.05);
             
-            // Workaholic trait: gain happiness when working? or just don't lose it?
-            // Let's say workaholics gain a tiny bit of happiness when working
-            if (settler.state === 'working' && settler.traits?.some(t => t.type === 'workaholic')) {
+            if (currentSettler.state === 'working' && currentSettler.traits?.some(t => t.type === 'workaholic')) {
                  newHappiness = Math.min(100, newHappiness + 0.01);
             }
 
-            return { ...settler, hunger, energy };
+            return currentSettler;
           });
 
           // Research progression
