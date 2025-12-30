@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS, FloatingEffect } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS, FloatingEffect, Expedition } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -65,10 +65,12 @@ export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
       resources: {
-        wood: 100,
-        food: 50,
-        stone: 0,
+        wood: 120,
+        food: 60,
+        stone: 40,
         iron: 0,
+        tools: 0,
+        relics: 0,
       },
       settlers: [
           { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.strong] },
@@ -142,6 +144,7 @@ export const useGameStore = create<GameState>()(
       researchProgress: 0,
       tradeOffers: [] as TradeOffer[],
       lastTradeRefresh: 0,
+      expeditions: [] as Expedition[],
       floatingTexts: [] as FloatingEffect[],
 
       addFloatingText: (text: string, position: [number, number, number], color: string = 'text-white') => {
@@ -453,71 +456,51 @@ export const useGameStore = create<GameState>()(
         const costWood = 15;
 
         if (state.resources.food < costFood || state.resources.wood < costWood) {
-            state.addLog('Not enough supplies to send an expedition.', 'warning');
-            return;
+          state.addLog('Not enough supplies (25 Food, 15 Wood) to send an expedition.', 'warning');
+          return;
         }
 
-        // Deduct supplies
-        set((state) => ({
+        set((state) => {
+          const availableSettlers = state.settlers.filter(s => s.state === 'idle' || s.state === 'resting');
+          if (availableSettlers.length < 2) {
+            return {
+              logs: [{
+                id: generateId(),
+                message: "Not enough idle settlers for an expedition (need 2).",
+                timestamp: Date.now(),
+                type: 'warning' as LogEntry['type']
+              }, ...state.logs].slice(0, 20)
+            };
+          }
+
+          const expeditionSettlers = availableSettlers.slice(0, 2).map(s => s.id);
+          const newExpedition: Expedition = {
+            id: generateId(),
+            settlerIds: expeditionSettlers,
+            startTime: state.day,
+            duration: 2,
+            type: 'explore',
+            status: 'ongoing'
+          };
+
+          return {
             resources: {
-                ...state.resources,
-                food: (state.resources?.food || 0) - costFood,
-                wood: (state.resources?.wood || 0) - costWood,
+              ...state.resources,
+              food: state.resources.food - costFood,
+              wood: state.resources.wood - costWood,
             },
-        }));
-
-        const watchtowers = (state.buildings || []).filter(b => b.type === 'watchtower').length;
-        const luck = Math.random() + watchtowers * 0.05;
-
-        if (luck > 0.65) {
-            // Big success: gain resources + maybe a settler
-            const woodGain = 40 + Math.round(Math.random() * 40);
-            const foodGain = 30 + Math.round(Math.random() * 30);
-            const stoneGain = Math.round(Math.random() * 30);
-            set((state) => ({
-                resources: {
-                    ...state.resources,
-                    wood: (state.resources?.wood || 0) + woodGain,
-                    food: (state.resources?.food || 0) + foodGain,
-                    stone: (state.resources?.stone || 0) + stoneGain,
-                },
-                settlers: Math.random() > 0.6 ? [
-                    ...(state.settlers || []),
-                    {
-                        id: generateId(),
-                        name: `Scout ${(state.settlers || []).length + 1}`,
-                        position: [0, 0, 0] as [number, number, number],
-                        targetPosition: null,
-                        state: 'idle' as const,
-                        actionTimer: 0,
-                        hunger: 100,
-                        energy: 100,
-                        traits: getRandomTraits(),
-                    }
-                ] : (state.settlers || []),
-            }));
-            state.addLog(`Expedition returned with riches! +${woodGain} wood, +${foodGain} food${stoneGain ? `, +${stoneGain} stone` : ''}`, 'success');
-        } else if (luck > 0.35) {
-            const ironGain = 5 + Math.round(Math.random() * 10);
-            set((state) => ({
-                resources: {
-                    ...state.resources,
-                    iron: (state.resources?.iron || 0) + ironGain,
-                }
-            }));
-            state.addLog(`Expedition found rare iron veins! +${ironGain} iron`, 'info');
-        } else {
-            // Failure
-            const penalty = Math.max(5, Math.round((state.resources?.wood || 0) * 0.05));
-            set((state) => ({
-                resources: {
-                    ...state.resources,
-                    wood: Math.max(0, (state.resources?.wood || 0) - penalty),
-                },
-                happiness: Math.max(0, (state.happiness || 0) - 5),
-            }));
-            state.addLog('Expedition ran into trouble and limped home. Lost some supplies.', 'danger');
-        }
+            expeditions: [...state.expeditions, newExpedition],
+            settlers: state.settlers.map(s => 
+              expeditionSettlers.includes(s.id) ? { ...s, state: 'idle', job: undefined } : s
+            ),
+            logs: [{
+              id: generateId(),
+              message: "An expedition has set out into the wilderness!",
+              timestamp: Date.now(),
+              type: 'info' as LogEntry['type']
+            }, ...state.logs].slice(0, 20)
+          };
+        });
       },
 
       claimObjective: (id: string) => {
@@ -527,6 +510,7 @@ export const useGameStore = create<GameState>()(
 
         set((state) => ({
             resources: {
+                ...state.resources,
                 wood: state.resources.wood + (objective.reward.wood || 0),
                 food: state.resources.food + (objective.reward.food || 0),
                 stone: state.resources.stone + (objective.reward.stone || 0),
@@ -678,12 +662,38 @@ export const useGameStore = create<GameState>()(
           );
           const maxStorage = baseStorage + additionalStorage;
 
-          // Resource generation
+          // Resource generation and Production Chains
           (state.buildings || []).forEach((b) => {
             const gen = RESOURCE_GENERATION[b.type];
             if (!gen) return;
+
+            // Calculate efficiency based on workers having tools
+            const buildingWorkers = state.settlers.filter(s => s.job === b.id);
+            const workersWithTools = buildingWorkers.filter(s => s.hasTool).length;
+            const toolMultiplier = 1 + (workersWithTools / Math.max(1, buildingWorkers.length)) * 0.5; // Up to 50% boost
+
+            // Workshop production: Wood + Iron -> Tools
+            if (b.type === 'workshop' && buildingWorkers.length > 0) {
+              const woodCost = 0.2 * b.level;
+              const ironCost = 0.1 * b.level;
+              if (newResources.wood >= woodCost && newResources.iron >= ironCost) {
+                newResources.wood -= woodCost;
+                newResources.iron -= ironCost;
+                newResources.tools = Math.min(maxStorage, newResources.tools + 0.05 * b.level * toolMultiplier);
+              }
+            }
+
+            // Bakery production: Food -> Better Food
+            if (b.type === 'bakery' && buildingWorkers.length > 0) {
+              const foodCost = 0.2 * b.level;
+              if (newResources.food >= foodCost) {
+                newResources.food -= foodCost;
+                newResources.food = Math.min(maxStorage, newResources.food + 0.5 * b.level * toolMultiplier);
+              }
+            }
+
             (Object.keys(gen) as ResourceType[]).forEach((res) => {
-              const amount = (gen[res] || 0) * b.level * 0.1;
+              const amount = (gen[res] || 0) * b.level * 0.1 * toolMultiplier;
               newResources[res] = Math.min(maxStorage, newResources[res] + amount);
               
               // Trigger floating text occasionally for production
@@ -693,6 +703,78 @@ export const useGameStore = create<GameState>()(
               }
             });
           });
+
+          // Tool equipping logic
+          if (newResources.tools >= 1) {
+            const workerWithoutTool = newSettlers.find(s => s.job && !s.hasTool);
+            if (workerWithoutTool) {
+              newResources.tools -= 1;
+              workerWithoutTool.hasTool = true;
+              get().addLog(`${workerWithoutTool.name} equipped a tool for better efficiency!`, 'success');
+            }
+          }
+
+          // Expedition Progression
+          let newExpeditions = (state.expeditions || []).map(exp => {
+            if (exp.status === 'ongoing' && newDay >= exp.startTime + exp.duration) {
+              return { ...exp, status: 'completed' as const };
+            }
+            return exp;
+          });
+
+          // Handle completed expeditions (collect rewards)
+          newExpeditions.forEach(exp => {
+            if (exp.status === 'completed') {
+              const watchtowers = (state.buildings || []).filter(b => b.type === 'watchtower').length;
+              const luck = Math.random() + watchtowers * 0.1;
+              
+              let message = "";
+              let type: LogEntry['type'] = 'info';
+
+              if (luck > 0.7) {
+                const relicsGain = 1;
+                const ironGain = 15 + Math.floor(Math.random() * 20);
+                newResources.relics += relicsGain;
+                newResources.iron += ironGain;
+                
+                // Chance to find a new settler
+                if (Math.random() > 0.5) {
+                  const newSettler: Settler = {
+                    id: generateId(),
+                    name: `Survivor ${newSettlers.length + 1}`,
+                    position: [0, 0, 0],
+                    targetPosition: null,
+                    state: 'idle',
+                    actionTimer: 0,
+                    hunger: 100,
+                    energy: 100,
+                    traits: getRandomTraits(),
+                  };
+                  newSettlers.push(newSettler);
+                  message = `Expedition successful! Found ${relicsGain} Ancient Relic, ${ironGain} Iron, and rescued a survivor!`;
+                } else {
+                  message = `Expedition successful! Found ${relicsGain} Ancient Relic and ${ironGain} Iron!`;
+                }
+                type = 'success';
+              } else if (luck > 0.3) {
+                const woodGain = 50 + Math.floor(Math.random() * 50);
+                const foodGain = 40 + Math.floor(Math.random() * 40);
+                newResources.wood = Math.min(maxStorage, newResources.wood + woodGain);
+                newResources.food = Math.min(maxStorage, newResources.food + foodGain);
+                message = `Expedition returned with supplies: ${woodGain} Wood and ${foodGain} Food.`;
+              } else {
+                newHappiness = Math.max(0, newHappiness - 10);
+                message = "Expedition encountered danger and barely escaped. Happiness decreased.";
+                type = 'danger';
+              }
+
+              get().addLog(message, type);
+              exp.status = 'returned';
+            }
+          });
+
+          // Remove returned expeditions from list
+          newExpeditions = newExpeditions.filter(exp => exp.status !== 'returned');
 
           // Food consumption
           const foodCost = (state.settlers || []).length * 0.04;
@@ -968,6 +1050,8 @@ export const useGameStore = create<GameState>()(
                 food: 50,
                 stone: 0,
                 iron: 0,
+                tools: 0,
+                relics: 0,
             },
             settlers: [
                 { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.strong] },
@@ -984,12 +1068,12 @@ export const useGameStore = create<GameState>()(
             isBuilding: false,
             day: 1,
             tickRate: 1000,
+            expeditions: [],
+            floatingTexts: [],
             objectives: get().objectives.map(o => ({ ...o, complete: false, claimed: false })),
             unlockedResearch: [],
             currentResearch: null,
             researchProgress: 0,
-            tradeOffers: [],
-            lastTradeRefresh: 0,
         });
       },
     }),

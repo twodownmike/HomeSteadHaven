@@ -1,10 +1,12 @@
-export type ResourceType = 'wood' | 'food' | 'stone' | 'iron';
+export type ResourceType = 'wood' | 'food' | 'stone' | 'iron' | 'tools' | 'relics';
 
 export interface Resources {
   wood: number;
   food: number;
   stone: number;
   iron: number;
+  tools: number;
+  relics: number;
 }
 
 export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery' | 'workshop' | 'infirmary' | 'tradingPost';
@@ -35,6 +37,7 @@ export interface Settler {
   hunger: number; // 0-100, lower is hungrier
   energy: number; // 0-100, lower is tired
   traits: Trait[];
+  hasTool?: boolean;
 }
 
 export type TraitType = 'strong' | 'fast' | 'glutton' | 'ascetic' | 'insomniac' | 'workaholic';
@@ -128,6 +131,15 @@ export interface TradeOffer {
   expiresAt: number;
 }
 
+export interface Expedition {
+  id: string;
+  settlerIds: string[];
+  startTime: number;
+  duration: number; // in days
+  type: 'scavenge' | 'explore' | 'rescue';
+  status: 'ongoing' | 'completed' | 'returned';
+}
+
 export interface GameState {
   resources: Resources;
   settlers: Settler[];
@@ -148,6 +160,7 @@ export interface GameState {
   researchProgress: number; // 0..1 for current research
   tradeOffers: TradeOffer[];
   lastTradeRefresh: number; // Day number
+  expeditions: Expedition[];
   floatingTexts: FloatingEffect[];
   
   // Actions

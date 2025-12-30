@@ -12,6 +12,8 @@ const ResourceIcon = ({ type }: { type: ResourceType }) => {
     case 'food': return <Wheat className="w-4 h-4 text-yellow-600" />;
     case 'stone': return <Hammer className="w-4 h-4 text-stone-500" />;
     case 'iron': return <Mountain className="w-4 h-4 text-slate-400" />;
+    case 'tools': return <Hammer className="w-4 h-4 text-blue-400" />;
+    case 'relics': return <Trophy className="w-4 h-4 text-purple-400" />;
   }
 };
 
@@ -76,6 +78,7 @@ export const GameUI: React.FC = () => {
     tradeOffers,
     lastTradeRefresh,
     acceptTrade,
+    expeditions,
   } = useGameStore();
   const [showMenu, setShowMenu] = useState(false);
   const [showBuildMenu, setShowBuildMenu] = useState(false);
@@ -253,7 +256,7 @@ export const GameUI: React.FC = () => {
           </motion.button>
 
           <div className="flex-1 overflow-x-auto no-scrollbar flex gap-2 mask-linear-fade">
-            {(['wood', 'food', 'stone', 'iron'] as ResourceType[]).map((res) => (
+            {(['wood', 'food', 'stone', 'iron', 'tools', 'relics'] as ResourceType[]).map((res) => (
               <ResourceDisplay key={res} type={res} amount={resources[res]} />
             ))}
           </div>
@@ -343,6 +346,28 @@ export const GameUI: React.FC = () => {
               >
                 <Compass className="w-4 h-4 text-indigo-300" /> Expedition
               </motion.button>
+
+              {/* Active Expeditions List */}
+              {expeditions && expeditions.length > 0 && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="text-[10px] uppercase opacity-60 font-bold tracking-wider px-1">Active Expeditions</div>
+                  {expeditions.map(exp => (
+                    <div key={exp.id} className="bg-white/5 rounded-xl p-2 border border-white/5 text-xs">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-indigo-200 font-medium capitalize">{exp.type}</span>
+                        <span className="text-[10px] text-gray-400">Day {exp.startTime.toFixed(0)}</span>
+                      </div>
+                      <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                        <motion.div 
+                          className="h-full bg-indigo-400"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, ((day - exp.startTime) / exp.duration) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="h-px bg-white/10" />
@@ -602,6 +627,13 @@ export const GameUI: React.FC = () => {
                                               </div>
                                           </div>
                                       ))}
+                                      {settler.hasTool && (
+                                          <div className="group relative cursor-help">
+                                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-200 border border-blue-500/30 flex items-center gap-1">
+                                                  <Hammer className="w-2.5 h-2.5" /> Efficient
+                                              </span>
+                                          </div>
+                                      )}
                                   </div>
                               </div>
                           )}

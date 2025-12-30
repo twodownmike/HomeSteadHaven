@@ -6,7 +6,7 @@ import { Settler } from './Settler';
 import { FloatingText } from './FloatingText';
 
 export const Scene: React.FC = () => {
-  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers, floatingTexts, removeFloatingText } = useGameStore();
+  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers, floatingTexts, removeFloatingText, expeditions } = useGameStore();
   const [hoverPos, setHoverPos] = useState<[number, number, number] | null>(null);
   const [isValidPlacement, setIsValidPlacement] = useState(true);
   
@@ -118,7 +118,11 @@ export const Scene: React.FC = () => {
       ))}
 
       {/* Render Settlers */}
-      {(settlers || []).map((settler) => (
+      {(settlers || []).filter(s => {
+        // Hide settlers who are on an expedition
+        const isOnExpedition = (expeditions || []).some((exp: any) => exp.settlerIds.includes(s.id));
+        return !isOnExpedition;
+      }).map((settler) => (
         <Settler key={settler.id} settler={settler} />
       ))}
 

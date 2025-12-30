@@ -163,6 +163,20 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
                 <mesh ref={rightArmRef} position={[0.2, 0.6, 0]} castShadow>
                     <boxGeometry args={[0.1, 0.35, 0.1]} />
                     <meshStandardMaterial color={colors.shirt} />
+                    {settler.hasTool && (
+                        <group position={[0, -0.2, 0.1]} rotation={[Math.PI / 4, 0, 0]}>
+                            {/* Hammer Handle */}
+                            <mesh position={[0, 0, 0]}>
+                                <boxGeometry args={[0.04, 0.3, 0.04]} />
+                                <meshStandardMaterial color="#5d4037" />
+                            </mesh>
+                            {/* Hammer Head */}
+                            <mesh position={[0, 0.15, 0]}>
+                                <boxGeometry args={[0.12, 0.08, 0.08]} />
+                                <meshStandardMaterial color="#757575" metalness={0.8} roughness={0.2} />
+                            </mesh>
+                        </group>
+                    )}
                 </mesh>
             </group>
 
