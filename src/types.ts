@@ -96,6 +96,13 @@ export interface ResearchTopic {
   barnLevelReq: number;
 }
 
+export interface FloatingEffect {
+  id: string;
+  text: string;
+  position: [number, number, number];
+  color: string;
+}
+
 export interface GameSaveData {
   resources: Resources;
   settlers: Settler[];
@@ -141,6 +148,7 @@ export interface GameState {
   researchProgress: number; // 0..1 for current research
   tradeOffers: TradeOffer[];
   lastTradeRefresh: number; // Day number
+  floatingTexts: FloatingEffect[];
   
   // Actions
   addResource: (type: ResourceType, amount: number) => void;
@@ -162,6 +170,8 @@ export interface GameState {
   cancelResearch: () => void;
   acceptTrade: (offerId: string) => void;
   refreshTrades: () => void;
+  addFloatingText: (text: string, position: [number, number, number], color?: string) => void;
+  removeFloatingText: (id: string) => void;
   loadSaveData: (data: Partial<GameSaveData>) => void;
   tick: () => void;
   reset: () => void;

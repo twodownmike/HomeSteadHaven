@@ -3,9 +3,10 @@ import { useGameStore } from '../../store';
 import { BuildingModel } from './BuildingModel';
 import { EnvironmentProps } from './Nature';
 import { Settler } from './Settler';
+import { FloatingText } from './FloatingText';
 
 export const Scene: React.FC = () => {
-  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers } = useGameStore();
+  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers, floatingTexts, removeFloatingText } = useGameStore();
   const [hoverPos, setHoverPos] = useState<[number, number, number] | null>(null);
   const [isValidPlacement, setIsValidPlacement] = useState(true);
   
@@ -119,6 +120,17 @@ export const Scene: React.FC = () => {
       {/* Render Settlers */}
       {(settlers || []).map((settler) => (
         <Settler key={settler.id} settler={settler} />
+      ))}
+
+      {/* Render Global Floating Texts */}
+      {(floatingTexts || []).map((ft) => (
+        <FloatingText
+          key={ft.id}
+          text={ft.text}
+          position={ft.position}
+          color={ft.color}
+          onComplete={() => removeFloatingText(ft.id)}
+        />
       ))}
 
       {/* Render Ghost Building for placement */}

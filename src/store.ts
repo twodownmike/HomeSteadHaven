@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS, FloatingEffect } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -142,6 +142,22 @@ export const useGameStore = create<GameState>()(
       researchProgress: 0,
       tradeOffers: [] as TradeOffer[],
       lastTradeRefresh: 0,
+      floatingTexts: [] as FloatingEffect[],
+
+      addFloatingText: (text: string, position: [number, number, number], color: string = 'text-white') => {
+        set((state) => ({
+          floatingTexts: [
+            ...state.floatingTexts,
+            { id: generateId(), text, position, color }
+          ]
+        }));
+      },
+
+      removeFloatingText: (id: string) => {
+        set((state) => ({
+          floatingTexts: state.floatingTexts.filter(ft => ft.id !== id)
+        }));
+      },
 
       addLog: (message: string, type: LogEntry['type'] = 'info') => {
           set((state) => {
@@ -669,6 +685,12 @@ export const useGameStore = create<GameState>()(
             (Object.keys(gen) as ResourceType[]).forEach((res) => {
               const amount = (gen[res] || 0) * b.level * 0.1;
               newResources[res] = Math.min(maxStorage, newResources[res] + amount);
+              
+              // Trigger floating text occasionally for production
+              if (amount > 0 && Math.random() < 0.05) {
+                const color = res === 'wood' ? 'text-amber-400' : res === 'food' ? 'text-yellow-400' : res === 'stone' ? 'text-stone-300' : 'text-blue-300';
+                get().addFloatingText(`+${Math.floor(amount * 10)} ${res}`, [b.position[0], b.position[1] + 2, b.position[2]], color);
+              }
             });
           });
 

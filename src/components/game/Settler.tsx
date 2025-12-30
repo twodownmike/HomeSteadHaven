@@ -3,12 +3,15 @@ import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Settler as SettlerType } from '../../types';
+import { useGameStore } from '../../store';
+import { Utensils, Zap } from 'lucide-react';
 
 interface SettlerProps {
     settler: SettlerType;
 }
 
 export const Settler: React.FC<SettlerProps> = ({ settler }) => {
+    const buildings = useGameStore(state => state.buildings);
     const groupRef = useRef<THREE.Group>(null);
     const bodyRef = useRef<THREE.Group>(null);
     const leftArmRef = useRef<THREE.Mesh>(null);
@@ -77,19 +80,48 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
             // Body bob
             if (bodyRef.current) bodyRef.current.position.y = Math.abs(Math.sin(time * walkSpeed)) * 0.05;
         } else if (settler.state === 'working') {
+            const workplace = buildings.find(b => b.id === settler.job);
+            const jobType = workplace?.type;
             const workSpeed = 8;
-            // Chopping/Hammering motion
-            if (rightArmRef.current) {
-                rightArmRef.current.rotation.x = -Math.PI / 4 + Math.sin(time * workSpeed) * 0.5;
-            }
-            if (leftArmRef.current) {
-                leftArmRef.current.rotation.x = -Math.PI / 6;
-            }
-            if (bodyRef.current) {
-                bodyRef.current.position.y = Math.sin(time * workSpeed) * 0.02;
+            
+            if (jobType === 'farm') {
+                // Bending/harvesting motion
+                const bendAmount = Math.sin(time * 3) * 0.3 + 0.3;
+                if (bodyRef.current) bodyRef.current.rotation.x = bendAmount;
+                if (rightArmRef.current) rightArmRef.current.rotation.x = -bendAmount - 0.5;
+                if (leftArmRef.current) leftArmRef.current.rotation.x = -bendAmount - 0.5;
+            } else if (jobType === 'mine') {
+                // Heavy overhead swinging
+                const swing = Math.sin(time * 5);
+                if (rightArmRef.current) rightArmRef.current.rotation.x = -Math.PI / 2 + swing * 1.2;
+                if (bodyRef.current) bodyRef.current.rotation.x = Math.max(0, swing * 0.2);
+            } else if (jobType === 'lumberMill') {
+                // Sawing motion
+                const saw = Math.sin(time * 10) * 0.2;
+                if (rightArmRef.current) {
+                    rightArmRef.current.position.z = saw;
+                    rightArmRef.current.rotation.x = -Math.PI / 3;
+                }
+            } else {
+                // Default Chopping/Hammering motion
+                if (rightArmRef.current) {
+                    rightArmRef.current.rotation.x = -Math.PI / 4 + Math.sin(time * workSpeed) * 0.5;
+                }
+                if (leftArmRef.current) {
+                    leftArmRef.current.rotation.x = -Math.PI / 6;
+                }
+                if (bodyRef.current) {
+                    bodyRef.current.position.y = Math.sin(time * workSpeed) * 0.02;
+                }
             }
         } else {
             // Idle/Resting: reset positions
+            if (bodyRef.current) {
+                bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, 0, 0.1);
+            }
+            if (rightArmRef.current) {
+                rightArmRef.current.position.z = THREE.MathUtils.lerp(rightArmRef.current.position.z, 0, 0.1);
+            }
             if (leftLegRef.current) leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, 0, 0.1);
             if (rightLegRef.current) rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, 0, 0.1);
             if (leftArmRef.current) leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, 0, 0.1);
@@ -148,8 +180,22 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
             
             {/* Name Tag */}
             <Html position={[0, 1.3, 0]} center distanceFactor={10}>
-                <div className="bg-black/50 text-white text-[10px] px-1 rounded backdrop-blur-sm whitespace-nowrap pointer-events-none select-none">
-                    {settler.name}
+                <div className="flex flex-col items-center gap-1 pointer-events-none select-none">
+                    <div className="flex gap-1">
+                        {settler.hunger < 30 && (
+                            <div className="bg-orange-500/80 p-0.5 rounded shadow-lg animate-pulse">
+                                <Utensils className="w-3 h-3 text-white" />
+                            </div>
+                        )}
+                        {settler.energy < 30 && (
+                            <div className="bg-yellow-500/80 p-0.5 rounded shadow-lg animate-pulse">
+                                <Zap className="w-3 h-3 text-white" />
+                            </div>
+                        )}
+                    </div>
+                    <div className="bg-black/50 text-white text-[10px] px-1 rounded backdrop-blur-sm whitespace-nowrap">
+                        {settler.name}
+                    </div>
                 </div>
             </Html>
             

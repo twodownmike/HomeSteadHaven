@@ -1,7 +1,93 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { Sky, Stars, Environment, Sparkles, Cloud } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useGameStore } from '../../store';
 import * as THREE from 'three';
+
+const Birds: React.FC = () => {
+  const count = 5;
+  const birds = useMemo(() => Array.from({ length: count }).map(() => ({
+    speed: 0.5 + Math.random() * 0.5,
+    radius: 20 + Math.random() * 20,
+    offset: Math.random() * Math.PI * 2,
+    y: 10 + Math.random() * 10,
+  })), []);
+
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((state: any) => {
+    if (!groupRef.current) return;
+    const t = state.clock.elapsedTime;
+    groupRef.current.children.forEach((bird, i) => {
+      const data = birds[i];
+      const angle = t * data.speed + data.offset;
+      bird.position.x = Math.cos(angle) * data.radius;
+      bird.position.z = Math.sin(angle) * data.radius;
+      bird.position.y = data.y + Math.sin(t * 2 + data.offset) * 2;
+      bird.rotation.y = -angle + Math.PI / 2;
+      // Simple wing flap
+      const wing = bird.children[0];
+      if (wing) wing.rotation.z = Math.sin(t * 10) * 0.5;
+      const wing2 = bird.children[1];
+      if (wing2) wing2.rotation.z = -Math.sin(t * 10) * 0.5;
+    });
+  });
+
+  return (
+    <group ref={groupRef}>
+      {birds.map((_, i) => (
+        <group key={i}>
+          {/* Bird Body */}
+          <mesh>
+            <boxGeometry args={[0.2, 0.1, 0.4]} />
+            <meshStandardMaterial color="#333" />
+          </mesh>
+          {/* Wings */}
+          <mesh position={[0.15, 0, 0]}>
+            <boxGeometry args={[0.3, 0.02, 0.2]} />
+            <meshStandardMaterial color="#444" />
+          </mesh>
+          <mesh position={[-0.15, 0, 0]}>
+            <boxGeometry args={[0.3, 0.02, 0.2]} />
+            <meshStandardMaterial color="#444" />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+};
+
+const Lightning: React.FC<{ active: boolean }> = ({ active }) => {
+  const [visible, setVisible] = useState(false);
+  const { camera } = useThree();
+  const originalPos = useRef(new THREE.Vector3());
+
+  useEffect(() => {
+    if (!active) return;
+    const trigger = () => {
+      if (Math.random() > 0.98) {
+        setVisible(true);
+        originalPos.current.copy(camera.position);
+        setTimeout(() => setVisible(false), 100 + Math.random() * 200);
+      }
+    };
+    const interval = setInterval(trigger, 500);
+    return () => clearInterval(interval);
+  }, [active, camera]);
+
+  useFrame(() => {
+    if (visible) {
+      camera.position.x += (Math.random() - 0.5) * 0.5;
+      camera.position.z += (Math.random() - 0.5) * 0.5;
+    }
+  });
+
+  if (!visible) return null;
+
+  return (
+    <pointLight position={[0, 50, 0]} intensity={50} color="#fff" distance={200} />
+  );
+};
 
 export const GameEnvironment: React.FC = () => {
   const { day, weather } = useGameStore();
@@ -37,6 +123,8 @@ export const GameEnvironment: React.FC = () => {
 
   return (
     <>
+      <Birds />
+      <Lightning active={weather === 'rain'} />
       <Sky 
         sunPosition={sunPosition} 
         turbidity={weather !== 'sunny' ? 10 : 0.5} 

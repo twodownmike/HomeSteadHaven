@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { BuildingType } from '../../types';
 import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
@@ -101,30 +101,487 @@ const Animal: React.FC<AnimalProps> = ({ type, position, rotation = [0, 0, 0], g
   );
 };
 
-export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, selected, ghost, isValid = true, onClick }) => {
-  const color = useMemo(() => {
-    if (ghost && !isValid) return '#ff0000'; // Red if invalid placement
-
-    switch (type) {
-      case 'cabin': return '#8B4513'; // SaddleBrown
-      case 'farm': return '#DAA520'; // GoldenRod
-      case 'lumberMill': return '#556B2F'; // DarkOliveGreen
-      case 'mine': return '#696969'; // DimGray
-      case 'warehouse': return '#A0522D'; // Sienna
-      case 'bakery': return '#d97706'; // Warm bread tone
-      case 'well': return '#3b82f6'; // Water blue
-      case 'campfire': return '#f97316'; // Orange glow
-      case 'watchtower': return '#9ca3af'; // Gray timber
-      case 'fishery': return '#0ea5e9'; // Water teal
-      default: return '#ffffff';
+const SmokeParticle: React.FC<{ delay: number }> = ({ delay }) => {
+  const ref = useRef<THREE.Mesh>(null);
+  
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = (state.clock.elapsedTime + delay) % 2;
+    const progress = t / 2;
+    
+    ref.current.position.y = progress * 1.5;
+    ref.current.scale.setScalar(0.2 + progress * 0.8);
+    ref.current.rotation.y = progress * Math.PI;
+    ref.current.rotation.z = progress * Math.PI * 0.5;
+    
+    if (ref.current.material instanceof THREE.MeshStandardMaterial) {
+      ref.current.material.opacity = (1 - progress) * 0.4;
     }
-  }, [type, ghost, isValid]);
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <boxGeometry args={[0.3, 0.3, 0.3]} />
+      <meshStandardMaterial color="#9ca3af" transparent opacity={0.4} />
+    </mesh>
+  );
+};
+
+const Smoke: React.FC<{ position: [number, number, number] }> = ({ position }) => {
+  return (
+    <group position={position}>
+      <SmokeParticle delay={0} />
+      <SmokeParticle delay={0.7} />
+      <SmokeParticle delay={1.4} />
+    </group>
+  );
+};
+
+const Campfire: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const fireRef = useRef<THREE.Mesh>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
+
+  useFrame((state) => {
+    if (ghost || !fireRef.current) return;
+    const t = state.clock.elapsedTime;
+    
+    // Flicker scale
+    const s = 1 + Math.sin(t * 10) * 0.1 + Math.sin(t * 25) * 0.05;
+    fireRef.current.scale.set(s, s, s);
+    
+    // Flicker color
+    if (fireRef.current.material instanceof THREE.MeshStandardMaterial) {
+      const r = 0.9 + Math.sin(t * 15) * 0.1;
+      fireRef.current.material.color.setRGB(r, 0.45, 0.1);
+      fireRef.current.material.emissiveIntensity = 1 + Math.sin(t * 20) * 0.4;
+    }
+
+    if (lightRef.current) {
+        lightRef.current.intensity = 2 + Math.sin(t * 15) * 0.5;
+    }
+  });
+
+  return (
+    <group>
+      <mesh position={[0, 0.8, 0]} castShadow>
+        <cylinderGeometry args={[0.6, 0.7, 0.4, 10]} />
+        <meshStandardMaterial color="#92400e" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh ref={fireRef} position={[0, 1.1, 0]}>
+        <coneGeometry args={[0.5, 0.6, 10]} />
+        <meshStandardMaterial color="#f97316" emissive="#fb923c" emissiveIntensity={ghost ? 0 : 1.2} transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1, 0.1, 8, 24]} />
+        <meshStandardMaterial color="#57534e" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {!ghost && <pointLight ref={lightRef} position={[0, 1.5, 0]} color="#f97316" intensity={2} distance={5} />}
+      {!ghost && <Smoke position={[0, 1.5, 0]} />}
+    </group>
+  );
+};
+
+const WellModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const waterRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (ghost || !waterRef.current) return;
+    const t = state.clock.elapsedTime;
+    waterRef.current.position.y = 1.1 + Math.sin(t * 2) * 0.05;
+  });
+
+  return (
+    <>
+      <mesh ref={waterRef} position={[0, 1.1, 0]} castShadow>
+        <cylinderGeometry args={[0.85, 0.85, 0.1, 16]} />
+        <meshStandardMaterial color="#3b82f6" transparent opacity={0.8} />
+      </mesh>
+      <mesh position={[0, 1.1, 0]} castShadow>
+        <cylinderGeometry args={[0.9, 0.9, 1.2, 16]} />
+        <meshStandardMaterial color="#60a5fa" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 1.7, 0]} castShadow>
+        <torusGeometry args={[0.8, 0.12, 8, 24]} />
+        <meshStandardMaterial color="#1d4ed8" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 2.3, 0]} castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 0.8, 8]} />
+        <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
+      </mesh>
+    </>
+  );
+};
+
+const FisheryModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const waterRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (ghost || !waterRef.current) return;
+    const t = state.clock.elapsedTime;
+    waterRef.current.position.y = 0.2 + Math.sin(t * 1.5) * 0.02;
+  });
+
+  return (
+    <group>
+      <mesh position={[0, 1, 0]} castShadow>
+        <boxGeometry args={[2.5, 1.6, 2]} />
+        <meshStandardMaterial color="#0ea5e9" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 2.3, 0]} castShadow>
+        <boxGeometry args={[2.7, 0.4, 2.2]} />
+        <meshStandardMaterial color="#075985" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[1.6, 0.5, 0]} castShadow>
+        <boxGeometry args={[1.5, 0.3, 1]} />
+        <meshStandardMaterial color="#7c3aed" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh ref={waterRef} position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[3, 3]} />
+        <meshStandardMaterial color="#38bdf8" transparent opacity={0.3} />
+      </mesh>
+    </group>
+  );
+};
+
+const TradingPostModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const canopyRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (ghost || !canopyRef.current) return;
+    const t = state.clock.elapsedTime;
+    canopyRef.current.rotation.x = (Math.PI / 6) + Math.sin(t * 2) * 0.02;
+  });
+
+  return (
+    <group>
+      {/* Main Stall */}
+      <mesh position={[0, 1, 0]} castShadow>
+         <boxGeometry args={[2.5, 1.5, 1.5]} />
+         <meshStandardMaterial color="#78350f" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Counter */}
+      <mesh position={[0, 0.8, 1]} castShadow>
+         <boxGeometry args={[2.5, 0.8, 0.5]} />
+         <meshStandardMaterial color="#b45309" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Canopy stripes */}
+      <mesh ref={canopyRef} position={[0, 2.2, 0.5]} rotation={[Math.PI / 6, 0, 0]} castShadow>
+         <boxGeometry args={[2.8, 0.2, 2.5]} />
+         <meshStandardMaterial color="#ef4444" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Crates */}
+      <mesh position={[-0.8, 0.4, 1.4]} castShadow>
+         <boxGeometry args={[0.5, 0.5, 0.5]} />
+         <meshStandardMaterial color="#d97706" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0.8, 0.4, 1.4]} castShadow>
+         <boxGeometry args={[0.5, 0.5, 0.5]} />
+         <meshStandardMaterial color="#fcd34d" transparent={transparent} opacity={opacity} />
+      </mesh>
+    </group>
+  );
+};
+
+const LumberMillModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const sawRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (ghost || !sawRef.current) return;
+    sawRef.current.rotation.x = state.clock.elapsedTime * 10;
+  });
+
+  return (
+    <group>
+      <mesh position={[0, 1, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.5, 2, 2.5]} />
+        <meshStandardMaterial color="#556b2f" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 2.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.8, 0.8, 2.2, 8]} />
+        <meshStandardMaterial color="#DEB887" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Saw Blade */}
+      <mesh ref={sawRef} position={[1.3, 0.8, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
+        <cylinderGeometry args={[0.6, 0.6, 0.05, 12]} />
+        <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.2} transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Saw Table */}
+      <mesh position={[1.3, 0.4, 0]} castShadow>
+        <boxGeometry args={[0.4, 0.8, 1.2]} />
+        <meshStandardMaterial color="#4a3728" transparent={transparent} opacity={opacity} />
+      </mesh>
+    </group>
+  );
+};
+
+const MineModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const bucketRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (ghost || !bucketRef.current) return;
+    bucketRef.current.position.y = 1.5 + Math.sin(state.clock.elapsedTime * 2) * 1.2;
+  });
+
+  return (
+    <group>
+      <mesh position={[0, 1, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.5, 2, 2.5]} />
+        <meshStandardMaterial color="#404040" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Entrance */}
+      <mesh position={[0, 0.8, 1.26]} castShadow>
+        <boxGeometry args={[1.2, 1.6, 0.1]} />
+        <meshStandardMaterial color="#1a1a1a" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Pulley Structure */}
+      <mesh position={[0.8, 2.5, 0.8]} castShadow>
+        <boxGeometry args={[0.2, 3, 0.2]} />
+        <meshStandardMaterial color="#262626" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0.8, 4, 0.4]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.1, 0.1, 1, 8]} />
+        <meshStandardMaterial color="#262626" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Elevator Bucket */}
+      <group ref={bucketRef} position={[0.8, 1.5, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.6, 0.6, 0.6]} />
+          <meshStandardMaterial color="#525252" transparent={transparent} opacity={opacity} />
+        </mesh>
+        <mesh position={[0, 0.3, 0]}>
+          <cylinderGeometry args={[0.02, 0.02, 2, 4]} />
+          <meshStandardMaterial color="#171717" transparent={transparent} opacity={opacity} />
+        </mesh>
+      </group>
+    </group>
+  );
+};
+const WorkshopModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const gearRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (ghost) return;
+    const t = state.clock.elapsedTime;
+    if (gearRef.current) gearRef.current.rotation.z = t * 2;
+  });
+
+  return (
+    <group>
+      <mesh position={[0, 1, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.5, 2, 2.5]} />
+        <meshStandardMaterial color="#4b5563" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Gear */}
+      <mesh ref={gearRef} position={[0, 2.2, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.8, 0.8, 0.2, 8]} />
+        <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.2} transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Spark Effect */}
+      {!ghost && Math.random() > 0.9 && (
+        <pointLight position={[1, 1, 1]} color="#60a5fa" intensity={2} distance={3} />
+      )}
+    </group>
+  );
+};
+
+const WarehouseModel: React.FC<{ transparent?: boolean; opacity?: number }> = ({ transparent, opacity }) => {
+  return (
+    <group>
+      <mesh position={[0, 1.2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[3, 2.4, 3]} />
+        <meshStandardMaterial color="#78350f" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Loading Dock */}
+      <mesh position={[0, 0.4, 1.6]} castShadow>
+        <boxGeometry args={[2, 0.8, 0.4]} />
+        <meshStandardMaterial color="#451a03" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Crates */}
+      {[[-1.2, 0.4, 1.6], [1.2, 0.4, 1.6]].map((p, i) => (
+        <mesh key={i} position={p as [number, number, number]} castShadow>
+          <boxGeometry args={[0.6, 0.6, 0.6]} />
+          <meshStandardMaterial color="#b45309" transparent={transparent} opacity={opacity} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+const InfirmaryModel: React.FC<{ transparent?: boolean; opacity?: number }> = ({ transparent, opacity }) => {
+  return (
+    <group>
+      <mesh position={[0, 1, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.5, 2, 2.5]} />
+        <meshStandardMaterial color="#f8fafc" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Red Cross Symbol */}
+      <mesh position={[0, 1.2, 1.26]}>
+        <boxGeometry args={[0.8, 0.2, 0.05]} />
+        <meshStandardMaterial color="#ef4444" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 1.2, 1.26]}>
+        <boxGeometry args={[0.2, 0.8, 0.05]} />
+        <meshStandardMaterial color="#ef4444" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Roof */}
+      <mesh position={[0, 2.2, 0]} rotation={[0, 0, Math.PI / 12]} castShadow>
+        <boxGeometry args={[2.8, 0.2, 2.8]} />
+        <meshStandardMaterial color="#334155" transparent={transparent} opacity={opacity} />
+      </mesh>
+    </group>
+  );
+};
+const SelectionRing: React.FC = () => {
+  const ref = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    const scale = 1 + Math.sin(t * 4) * 0.05;
+    ref.current.scale.set(scale, scale, 1);
+  });
+
+  return (
+    <mesh ref={ref} position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[1.5, 1.7, 32]} />
+      <meshBasicMaterial color="#00ff00" transparent opacity={0.6} />
+    </mesh>
+  );
+};
+
+const WatchtowerModel: React.FC<{ ghost?: boolean; transparent?: boolean; opacity?: number }> = ({ ghost, transparent, opacity }) => {
+  const lightRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (ghost || !lightRef.current) return;
+    lightRef.current.rotation.y = state.clock.elapsedTime * 0.5;
+  });
+
+  return (
+    <group>
+      <mesh position={[0, 2, 0]} castShadow>
+        <cylinderGeometry args={[0.7, 0.7, 4, 8]} />
+        <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 4.2, 0]} castShadow>
+        <boxGeometry args={[2.2, 0.4, 2.2]} />
+        <meshStandardMaterial color="#4b5563" transparent={transparent} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 4.8, 0]} castShadow>
+        <coneGeometry args={[1.6, 1, 6]} />
+        <meshStandardMaterial color="#1f2937" transparent={transparent} opacity={opacity} />
+      </mesh>
+      {/* Rotating Lookout Light */}
+      {!ghost && (
+        <group ref={lightRef} position={[0, 4.4, 0]}>
+          <pointLight 
+            color="#fef08a" 
+            intensity={2} 
+            distance={15} 
+            castShadow 
+          />
+          <mesh position={[0.5, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.1, 0.1, 0.4, 8]} />
+            <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={1} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+};
+
+const UpgradeParticle: React.FC<{ color: string }> = ({ color }) => {
+  const ref = useRef<THREE.Mesh>(null);
+  const velocity = useMemo(() => new THREE.Vector3(
+    (Math.random() - 0.5) * 4,
+    Math.random() * 4 + 2,
+    (Math.random() - 0.5) * 4
+  ), []);
+
+  useFrame((_state, delta) => {
+    if (!ref.current) return;
+    ref.current.position.addScaledVector(velocity, delta);
+    velocity.y -= delta * 8; // gravity
+    ref.current.scale.multiplyScalar(0.96);
+    if (ref.current.material instanceof THREE.MeshStandardMaterial) {
+      ref.current.material.opacity = Math.max(0, ref.current.material.opacity - delta * 0.8);
+    }
+  });
+
+  return (
+    <mesh ref={ref}>
+      <boxGeometry args={[0.2, 0.2, 0.2]} />
+      <meshStandardMaterial color={color} transparent opacity={1} emissive={color} emissiveIntensity={2} />
+    </mesh>
+  );
+};
+
+const UpgradeEffect: React.FC<{ active: boolean }> = ({ active }) => {
+  if (!active) return null;
+  return (
+    <group position={[0, 1, 0]}>
+      {Array.from({ length: 20 }).map((_, i) => (
+        <UpgradeParticle key={i} color="#fcd34d" />
+      ))}
+    </group>
+  );
+};
+
+export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, selected, ghost, isValid = true, onClick }) => {
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [mountScale, setMountScale] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const prevLevel = useRef(level);
+  const groupRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    // Pop animation on mount
+    setMountScale(0);
+    const timeout = setTimeout(() => setMountScale(1), 50);
+    
+    if (level > prevLevel.current && !ghost) {
+      setShowUpgrade(true);
+      const timer = setTimeout(() => setShowUpgrade(false), 1500);
+      prevLevel.current = level;
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(timeout);
+      };
+    }
+    prevLevel.current = level;
+    return () => clearTimeout(timeout);
+  }, [level, ghost]);
+
+  useFrame((state) => {
+    if (groupRef.current && !ghost) {
+      const targetScale = hovered ? mountScale * 1.05 : mountScale;
+      groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.15);
+    }
+    
+    if (groupRef.current && ghost) {
+      const pulse = 1 + Math.sin(state.clock.elapsedTime * 5) * 0.05;
+      groupRef.current.scale.set(pulse, pulse, pulse);
+    }
+  });
 
   const opacity = ghost ? 0.5 : 1;
   const transparent = ghost;
 
   return (
-    <group onClick={onClick}>
+    <group 
+      ref={groupRef} 
+      onClick={onClick} 
+      onPointerOver={() => !ghost && setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+      scale={ghost ? [1, 1, 1] : [0, 0, 0]}
+    >
+      {/* Ghost overlay tint */}
+      {ghost && !isValid && (
+        <mesh position={[0, 1, 0]}>
+          <boxGeometry args={[3.5, 4, 3.5]} />
+          <meshStandardMaterial color="#ff0000" transparent opacity={0.2} />
+        </mesh>
+      )}
       {/* Barn */}
       {type === 'barn' && (
         <>
@@ -177,12 +634,19 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
         </>
       )}
 
-      {/* Base (skip for farm to allow custom ground) */}
-      {type !== 'farm' && (
-        <mesh position={[0, 1, 0]} castShadow receiveShadow>
-          <boxGeometry args={[2, 2, 2]} />
-          <meshStandardMaterial color={color} transparent={transparent} opacity={opacity} />
-        </mesh>
+      {/* Workshop */}
+      {type === 'workshop' && (
+        <WorkshopModel ghost={ghost} transparent={transparent} opacity={opacity} />
+      )}
+
+      {/* Warehouse */}
+      {type === 'warehouse' && (
+        <WarehouseModel transparent={transparent} opacity={opacity} />
+      )}
+
+      {/* Infirmary */}
+      {type === 'infirmary' && (
+        <InfirmaryModel transparent={transparent} opacity={opacity} />
       )}
       
       {/* Cabin details */}
@@ -221,6 +685,7 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
             <boxGeometry args={[0.4, 0.8, 0.4]} />
             <meshStandardMaterial color="#9ca3af" roughness={0.4} transparent={transparent} opacity={opacity} />
           </mesh>
+          {!ghost && <Smoke position={[0.7, 3.2, 0.7]} />}
         </>
       )}
 
@@ -279,18 +744,12 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
       
       {/* Details for Mine */}
       {type === 'mine' && (
-        <mesh position={[0.8, 0.5, 0.8]} castShadow>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color="#2F2F2F" transparent={transparent} opacity={opacity} />
-        </mesh>
+        <MineModel ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Details for Lumber Mill */}
       {type === 'lumberMill' && (
-        <mesh position={[0, 2.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.8, 0.8, 2.2, 8]} />
-          <meshStandardMaterial color="#DEB887" transparent={transparent} opacity={opacity} />
-        </mesh>
+        <LumberMillModel ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Details for Bakery */}
@@ -304,126 +763,42 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
             <coneGeometry args={[0.4, 0.6, 6]} />
             <meshStandardMaterial color="#7c2d12" transparent={transparent} opacity={opacity} />
           </mesh>
+          {!ghost && <Smoke position={[0.6, 3.2, 0]} />}
         </>
       )}
 
       {/* Details for Well */}
       {type === 'well' && (
-        <>
-          <mesh position={[0, 1.1, 0]} castShadow>
-            <cylinderGeometry args={[0.9, 0.9, 1.2, 16]} />
-            <meshStandardMaterial color="#60a5fa" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 1.7, 0]} castShadow>
-            <torusGeometry args={[0.8, 0.12, 8, 24]} />
-            <meshStandardMaterial color="#1d4ed8" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 2.3, 0]} castShadow>
-            <cylinderGeometry args={[0.12, 0.12, 0.8, 8]} />
-            <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
-          </mesh>
-        </>
+        <WellModel ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Campfire */}
       {type === 'campfire' && (
-        <>
-          <mesh position={[0, 0.8, 0]} castShadow>
-            <cylinderGeometry args={[0.6, 0.7, 0.4, 10]} />
-            <meshStandardMaterial color="#92400e" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 1.1, 0]}>
-            <coneGeometry args={[0.5, 0.6, 10]} />
-            <meshStandardMaterial color="#f97316" emissive="#fb923c" emissiveIntensity={ghost ? 0 : 1.2} transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[1, 0.1, 8, 24]} />
-            <meshStandardMaterial color="#57534e" transparent={transparent} opacity={opacity} />
-          </mesh>
-        </>
+        <Campfire ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Watchtower */}
       {type === 'watchtower' && (
-        <>
-          <mesh position={[0, 2, 0]} castShadow>
-            <cylinderGeometry args={[0.7, 0.7, 4, 8]} />
-            <meshStandardMaterial color="#9ca3af" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 4.2, 0]} castShadow>
-            <boxGeometry args={[2.2, 0.4, 2.2]} />
-            <meshStandardMaterial color="#4b5563" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 4.8, 0]} castShadow>
-            <coneGeometry args={[1.6, 1, 6]} />
-            <meshStandardMaterial color="#1f2937" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[1, 1.2, 1]} rotation={[0, 0, Math.PI / 2]}>
-            <boxGeometry args={[0.2, 2, 0.5]} />
-            <meshStandardMaterial color="#d1d5db" transparent={transparent} opacity={opacity} />
-          </mesh>
-        </>
+        <WatchtowerModel ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Fishery */}
       {type === 'fishery' && (
-        <group>
-          <mesh position={[0, 1, 0]} castShadow>
-            <boxGeometry args={[2.5, 1.6, 2]} />
-            <meshStandardMaterial color="#0ea5e9" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 2.3, 0]} castShadow>
-            <boxGeometry args={[2.7, 0.4, 2.2]} />
-            <meshStandardMaterial color="#075985" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[1.6, 0.5, 0]} castShadow>
-            <boxGeometry args={[1.5, 0.3, 1]} />
-            <meshStandardMaterial color="#7c3aed" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[3, 3]} />
-            <meshStandardMaterial color="#38bdf8" transparent opacity={0.3} />
-          </mesh>
-        </group>
+        <FisheryModel ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Trading Post */}
       {type === 'tradingPost' && (
-        <group>
-          {/* Main Stall */}
-          <mesh position={[0, 1, 0]} castShadow>
-             <boxGeometry args={[2.5, 1.5, 1.5]} />
-             <meshStandardMaterial color="#78350f" transparent={transparent} opacity={opacity} />
-          </mesh>
-          {/* Counter */}
-          <mesh position={[0, 0.8, 1]} castShadow>
-             <boxGeometry args={[2.5, 0.8, 0.5]} />
-             <meshStandardMaterial color="#b45309" transparent={transparent} opacity={opacity} />
-          </mesh>
-          {/* Canopy stripes */}
-          <mesh position={[0, 2.2, 0.5]} rotation={[Math.PI / 6, 0, 0]} castShadow>
-             <boxGeometry args={[2.8, 0.2, 2.5]} />
-             <meshStandardMaterial color="#ef4444" transparent={transparent} opacity={opacity} />
-          </mesh>
-          {/* Crates */}
-          <mesh position={[-0.8, 0.4, 1.4]} castShadow>
-             <boxGeometry args={[0.5, 0.5, 0.5]} />
-             <meshStandardMaterial color="#d97706" transparent={transparent} opacity={opacity} />
-          </mesh>
-          <mesh position={[0.8, 0.4, 1.4]} castShadow>
-             <boxGeometry args={[0.5, 0.5, 0.5]} />
-             <meshStandardMaterial color="#fcd34d" transparent={transparent} opacity={opacity} />
-          </mesh>
-        </group>
+        <TradingPostModel ghost={ghost} transparent={transparent} opacity={opacity} />
       )}
 
       {/* Selection Ring */}
       {selected && !ghost && (
-        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.5, 1.7, 32]} />
-          <meshBasicMaterial color="#00ff00" />
-        </mesh>
+        <SelectionRing />
       )}
+
+      {/* Upgrade Burst */}
+      <UpgradeEffect active={showUpgrade} />
       
       {/* Label/Level (only for real buildings) */}
       {!ghost && (
