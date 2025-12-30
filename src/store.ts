@@ -817,6 +817,8 @@ export const useGameStore = create<GameState>()(
                 unlockedResearch: [...new Set([...state.unlockedResearch, state.currentResearch])],
                 currentResearch: null,
                 researchProgress: 0,
+                tradeOffers: newTradeOffers,
+                lastTradeRefresh: newLastTradeRefresh,
               };
             } else {
               return {
@@ -837,6 +839,8 @@ export const useGameStore = create<GameState>()(
                 unlockedResearch: state.unlockedResearch,
                 currentResearch: state.currentResearch,
                 researchProgress: progressed,
+                tradeOffers: newTradeOffers,
+                lastTradeRefresh: newLastTradeRefresh,
               };
             }
           }
