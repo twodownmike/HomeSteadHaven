@@ -6,8 +6,11 @@ import { GameUI } from './components/game/GameUI'
 import { Scene } from './components/game/Scene'
 import { GameLoop } from './components/game/GameLoop'
 import { GameEnvironment } from './components/game/GameEnvironment'
+import { useAudioManager } from './hooks/useAudio';
 
 function App() {
+  useAudioManager(); // Initialize ambient sounds
+
   return (
     <div className="relative w-full h-full bg-slate-900 touch-none">
       <GameLoop />

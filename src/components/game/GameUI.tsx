@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useGameStore } from '../../store';
-import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE } from '../../types';
+import { useAudioManager } from '../../hooks/useAudio';
+import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE, ResearchId } from '../../types';
 import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse, Zap, Utensils } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -79,17 +80,23 @@ export const GameUI: React.FC = () => {
     lastTradeRefresh,
     acceptTrade,
     expeditions,
+    productionStats,
+    cameraTarget,
+    setCameraTarget,
   } = useGameStore();
+  const { playSound } = useAudioManager();
   const [showMenu, setShowMenu] = useState(false);
   const [showBuildMenu, setShowBuildMenu] = useState(false);
   const [showObjectives, setShowObjectives] = useState(false);
   const [showResearch, setShowResearch] = useState(false);
   const [showPopulation, setShowPopulation] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
 
   const handleBuildSelect = (type: BuildingType) => {
+    playSound('click');
     if (selectedBuilding === type && isBuilding) {
       setSelectedBuilding(null);
     } else {
@@ -97,7 +104,23 @@ export const GameUI: React.FC = () => {
     }
   };
 
+  const handleClaimObjective = (id: string) => {
+    playSound('collect');
+    claimObjective(id);
+  };
+
+  const handleStartResearch = (id: ResearchId) => {
+    playSound('click');
+    startResearch(id);
+  };
+
+  const handleAcceptTrade = (id: string) => {
+    playSound('collect');
+    acceptTrade(id);
+  };
+
   const handleReset = () => {
+    playSound('click');
     if (confirm('Are you sure you want to reset your progress? This cannot be undone.')) {
         reset();
         setShowMenu(false);
@@ -236,6 +259,7 @@ export const GameUI: React.FC = () => {
       if (type === 'bakery') perks.push('Extra food and morale.');
       if (type === 'warehouse') perks.push('Major storage expansion.');
       if (type === 'tradingPost') perks.push('Trade resources with traveling merchants.');
+      if (type === 'wastePit') perks.push('Slowly reduces settlement waste when staffed.');
       map[type] = perks;
     });
     return map;
@@ -256,7 +280,7 @@ export const GameUI: React.FC = () => {
           </motion.button>
 
           <div className="flex-1 overflow-x-auto no-scrollbar flex gap-2 mask-linear-fade">
-            {(['wood', 'food', 'stone', 'iron', 'tools', 'relics'] as ResourceType[]).map((res) => (
+            {(['wood', 'food', 'stone', 'iron', 'tools', 'relics', 'waste'] as ResourceType[]).map((res) => (
               <ResourceDisplay key={res} type={res} amount={resources[res]} />
             ))}
           </div>
@@ -313,6 +337,14 @@ export const GameUI: React.FC = () => {
             <div className="flex flex-col gap-2">
               <div className="text-xs uppercase opacity-60 font-bold tracking-wider mb-1">Actions</div>
               
+              <motion.button 
+                whileHover={{ x: 5 }}
+                onClick={() => { setShowStats((v) => !v); setShowMenu(false); }} 
+                className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4 text-orange-300" /> Dashboard
+              </motion.button>
+
               <motion.button 
                 whileHover={{ x: 5 }}
                 onClick={() => { setShowObjectives((v) => !v); setShowMenu(false); }} 
@@ -440,6 +472,94 @@ export const GameUI: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {/* Mini-map */}
+      <div className="absolute bottom-4 right-4 w-32 h-32 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden pointer-events-auto z-40 hidden sm:block">
+        <div className="relative w-full h-full p-1">
+          {/* Map background */}
+          <div className="w-full h-full bg-green-900/20 rounded-lg relative overflow-hidden">
+            {/* Nature items */}
+            {nature.map(n => (
+              <div 
+                key={n.id}
+                className="absolute w-0.5 h-0.5 rounded-full bg-green-500/30"
+                style={{ 
+                  left: `${50 + (n.position[0] / 100) * 100}%`,
+                  top: `${50 + (n.position[2] / 100) * 100}%`
+                }}
+              />
+            ))}
+            {/* Buildings */}
+            {buildings.map(b => (
+              <div 
+                key={b.id}
+                className={`absolute w-1.5 h-1.5 rounded-sm border border-white/20 ${b.type === 'barn' ? 'bg-amber-500' : 'bg-white/40'}`}
+                style={{ 
+                  left: `${50 + (b.position[0] / 100) * 100}%`,
+                  top: `${50 + (b.position[2] / 100) * 100}%`
+                }}
+              />
+            ))}
+            {/* Settlers */}
+            {settlers.map(s => (
+              <div 
+                key={s.id}
+                className="absolute w-1 h-1 rounded-full bg-blue-400"
+                style={{ 
+                  left: `${50 + (s.position[0] / 100) * 100}%`,
+                  top: `${50 + (s.position[2] / 100) * 100}%`
+                }}
+              />
+            ))}
+          </div>
+          <div className="absolute top-1 left-1 text-[8px] font-bold text-white/50 uppercase tracking-widest">Homestead</div>
+        </div>
+      </div>
+
+      {/* Production Dashboard */}
+      <AnimatePresence>
+        {showStats && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="pointer-events-auto w-full max-w-2xl bg-black/90 backdrop-blur-xl p-6 rounded-3xl border border-white/10 text-white shadow-2xl mx-auto mt-20 z-50"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <RefreshCw className="w-6 h-6 text-orange-400" />
+                <h3 className="text-xl font-bold">Production Dashboard</h3>
+              </div>
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setShowStats(false)}>
+                <X className="w-6 h-6 text-gray-400" />
+              </motion.button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {(Object.keys(productionStats) as ResourceType[]).map(res => {
+                const net = productionStats[res] * 10; // Per 10 ticks roughly
+                return (
+                  <div key={res} className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ResourceIcon type={res} />
+                      <span className="text-sm font-medium capitalize">{res}</span>
+                    </div>
+                    <div className={`text-lg font-bold ${net > 0 ? 'text-green-400' : net < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                      {net > 0 ? '+' : ''}{net.toFixed(1)} / day
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <div className="text-sm text-gray-400">
+                Stats show net resource changes per game day. Negative values indicate consumption (food for settlers, materials for workshops).
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Research Panel */}
       <AnimatePresence>
         {showResearch && (
@@ -507,7 +627,7 @@ export const GameUI: React.FC = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={cancelResearch}
+                          onClick={() => { playSound('click'); cancelResearch(); }}
                           className="text-xs px-3 py-1 rounded-lg border border-cyan-400 text-cyan-100 hover:bg-cyan-500/20"
                         >
                           Cancel
@@ -516,7 +636,7 @@ export const GameUI: React.FC = () => {
                         <motion.button
                           whileHover={disabled ? {} : { scale: 1.05 }}
                           whileTap={disabled ? {} : { scale: 0.95 }}
-                          onClick={() => startResearch(topic.id)}
+                          onClick={() => handleStartResearch(topic.id)}
                           disabled={disabled}
                           className={`text-xs px-3 py-1 rounded-lg border ${disabled ? 'border-white/10 text-gray-400 opacity-60 cursor-not-allowed' : 'border-cyan-400 text-cyan-100 hover:bg-cyan-500/20'}`}
                         >
@@ -568,8 +688,17 @@ export const GameUI: React.FC = () => {
                         className="p-3 rounded-xl border border-white/10 bg-white/5 flex flex-col gap-2"
                       >
                           <div className="flex justify-between items-start">
-                              <div>
-                                  <div className="font-bold text-sm">{settler.name}</div>
+                              <div 
+                                className="cursor-pointer group"
+                                onClick={() => {
+                                  setCameraTarget(cameraTarget === settler.id ? null : settler.id);
+                                  setShowPopulation(false);
+                                }}
+                              >
+                                  <div className="font-bold text-sm group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                                    {settler.name}
+                                    {cameraTarget === settler.id && <Compass className="w-3 h-3 animate-pulse text-blue-400" />}
+                                  </div>
                                   <div className="text-xs text-gray-400 capitalize">{settler.state}</div>
                               </div>
                               {jobBuilding ? (
@@ -599,17 +728,44 @@ export const GameUI: React.FC = () => {
                               </div>
                               <div className="flex flex-col gap-1">
                                   <div className="flex items-center gap-1 text-xs text-gray-300">
-                                      <Zap className="w-3 h-3 text-yellow-300" />
+                                      <Zap className={`w-3 h-3 ${settler.hasTool ? 'text-blue-400' : 'text-yellow-300'}`} />
                                       <span>{Math.floor(settler.energy || 0)}%</span>
                                   </div>
                                   <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                                       <motion.div 
-                                        className="h-full bg-yellow-400" 
+                                        className={`h-full ${settler.hasTool ? 'bg-blue-400' : 'bg-yellow-400'}`}
                                         initial={{ width: 0 }}
                                         animate={{ width: `${settler.energy || 0}%` }}
                                       />
                                   </div>
                               </div>
+                              <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-1 text-xs text-gray-300">
+                                      <HeartPulse className={`w-3 h-3 ${settler.isSick ? 'text-red-400' : 'text-green-300'}`} />
+                                      <span>{Math.floor(settler.health || 0)}%</span>
+                                  </div>
+                                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        className={`h-full ${settler.isSick ? 'bg-red-500' : 'bg-green-400'}`}
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${settler.health || 0}%` }}
+                                      />
+                                  </div>
+                              </div>
+                              {settler.hasTool && (
+                                <div className="col-span-2 flex flex-col gap-1 mt-1">
+                                  <div className="flex justify-between text-[10px] text-gray-400">
+                                    <span>Tool Quality</span>
+                                    <span>{Math.floor(settler.toolHealth || 0)}%</span>
+                                  </div>
+                                  <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                                    <motion.div 
+                                      className="h-full bg-blue-500"
+                                      animate={{ width: `${settler.toolHealth || 0}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
                           </div>
 
                           {settler.traits && settler.traits.length > 0 && (
@@ -695,10 +851,26 @@ export const GameUI: React.FC = () => {
             <div className="flex flex-col gap-3">
               {selectedStats && (
                 <div className="grid grid-cols-2 gap-2 text-xs bg-white/5 border border-white/10 rounded-xl p-3">
-                  {selectedStats.housing && <div className="text-gray-200">Housing: +{selectedStats.housing}</div>}
-                  {selectedStats.storage && <div className="text-gray-200">Storage: +{selectedStats.storage * selectedBuildingData.level}</div>}
-                  {selectedStats.happiness && <div className="text-gray-200">Happiness: +{(selectedStats.happiness * selectedBuildingData.level).toFixed(1)}</div>}
-                  {selectedStats.workers !== undefined && <div className="text-gray-200">{workerText}</div>}
+                  {selectedStats.housing && <div className="text-gray-200 text-center">Housing: +{selectedStats.housing}</div>}
+                  {selectedStats.storage && <div className="text-gray-200 text-center">Storage: +{selectedStats.storage * selectedBuildingData.level}</div>}
+                  {selectedStats.happiness && <div className="text-gray-200 text-center">Happiness: +{(selectedStats.happiness * selectedBuildingData.level).toFixed(1)}</div>}
+                  {selectedStats.workers !== undefined && <div className="text-gray-200 text-center">{workerText}</div>}
+                </div>
+              )}
+
+              {/* Internal Inventory */}
+              {selectedBuildingData.inventory && Object.values(selectedBuildingData.inventory).some(v => v > 0) && (
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Stored Resources</div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(selectedBuildingData.inventory).map(([res, amt]) => amt > 0 && (
+                      <div key={res} className="flex items-center gap-1.5 bg-black/30 px-2 py-1 rounded-lg border border-white/5 text-xs">
+                        <ResourceIcon type={res as ResourceType} />
+                        <span className="font-bold">{amt.toFixed(1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[10px] text-gray-500 italic">Assign logistics workers to the Barn or Warehouse to collect these.</div>
                 </div>
               )}
 
@@ -790,7 +962,7 @@ export const GameUI: React.FC = () => {
                                       <motion.button
                                           whileHover={canAfford ? { scale: 1.05 } : {}}
                                           whileTap={canAfford ? { scale: 0.95 } : {}}
-                                          onClick={() => acceptTrade(offer.id)}
+                                          onClick={() => handleAcceptTrade(offer.id)}
                                           disabled={!canAfford}
                                           className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${canAfford ? 'bg-green-600/30 border-green-500 text-green-100 hover:bg-green-600/50' : 'bg-gray-700/30 border-gray-600 text-gray-500 cursor-not-allowed'}`}
                                       >
@@ -878,7 +1050,7 @@ export const GameUI: React.FC = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={() => claimObjective(obj.id)}
+                          onClick={() => handleClaimObjective(obj.id)}
                           className="px-3 py-1 rounded-lg bg-green-600/60 hover:bg-green-600 text-sm font-semibold"
                         >
                           Claim

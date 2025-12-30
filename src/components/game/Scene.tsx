@@ -1,14 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { PerspectiveCamera, OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
 import { useGameStore } from '../../store';
 import { BuildingModel } from './BuildingModel';
 import { EnvironmentProps } from './Nature';
 import { Settler } from './Settler';
 import { FloatingText } from './FloatingText';
 
+import { useAudioManager } from '../../hooks/useAudio';
+
 export const Scene: React.FC = () => {
-  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers, floatingTexts, removeFloatingText, expeditions } = useGameStore();
+  const { buildings, nature, selectedBuilding, selectedBuildingId, isBuilding, addBuilding, selectBuildingId, setSelectedBuilding, season, settlers, floatingTexts, removeFloatingText, expeditions, day, cameraTarget } = useGameStore();
+  const { playSound } = useAudioManager();
   const [hoverPos, setHoverPos] = useState<[number, number, number] | null>(null);
   const [isValidPlacement, setIsValidPlacement] = useState(true);
+  const orbitRef = useRef<any>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+
+  const timeOfDay = day % 1;
+  const isNight = timeOfDay > 0.75 || timeOfDay < 0.2;
+  
+  // Dynamic Lighting based on time of day
+  const lightIntensity = isNight ? 0.2 : 1.2;
+  const sunPosition: [number, number, number] = [
+    Math.cos(timeOfDay * Math.PI * 2) * 50,
+    Math.sin(timeOfDay * Math.PI * 2) * 50,
+    0
+  ];
+  const skyColor = isNight ? '#050b1a' : '#87ceeb';
+
+  useFrame(() => {
+    if (!cameraTarget || !orbitRef.current) return;
+
+    let targetPos: [number, number, number] | undefined;
+
+    // Find settler or building position
+    const targetSettler = settlers.find(s => s.id === cameraTarget);
+    if (targetSettler) {
+      targetPos = targetSettler.position;
+    } else {
+      const targetBuilding = buildings.find(b => b.id === cameraTarget);
+      if (targetBuilding) {
+        targetPos = targetBuilding.position;
+      }
+    }
+
+    if (targetPos) {
+      orbitRef.current.target.lerp(new THREE.Vector3(...targetPos), 0.1);
+    }
+  });
   
   // Grid size for snapping
   const GRID_SIZE = 2;
@@ -70,6 +111,7 @@ export const Scene: React.FC = () => {
       e.stopPropagation();
       if (isValidPlacement) {
           addBuilding(selectedBuilding, hoverPos);
+          playSound('build');
       }
     } else {
         // Deselect if clicking ground and not clicking a building (buildings stop propagation)
@@ -88,8 +130,22 @@ export const Scene: React.FC = () => {
 
   return (
     <group>
+      <PerspectiveCamera makeDefault ref={cameraRef} position={[20, 20, 20]} fov={50} />
+      <OrbitControls ref={orbitRef} makeDefault minDistance={10} maxDistance={60} maxPolarAngle={Math.PI / 2.1} />
+      
+      <color attach="background" args={[skyColor]} />
       <EnvironmentProps />
       
+      <ambientLight intensity={lightIntensity * 0.5} />
+      <directionalLight 
+        position={sunPosition} 
+        intensity={lightIntensity} 
+        castShadow 
+        shadow-mapSize={[2048, 2048]}
+      >
+        <orthographicCamera attach="shadow-camera" args={[-50, 50, 50, -50, 0.1, 100]} />
+      </directionalLight>
+
       {/* Ground */}
       <mesh 
         rotation={[-Math.PI / 2, 0, 0]} 

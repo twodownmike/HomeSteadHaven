@@ -46,11 +46,12 @@ const getRandomTraits = (): Trait[] => {
 };
 
 const initialBarn: Building = {
-  id: 'barn-main',
+  id: 'barn-initial',
   type: 'barn',
   position: [0, 0, 0],
   level: 1,
   lastCollected: Date.now(),
+  inventory: { wood: 0, food: 0, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 },
 };
 
 export const BARN_LEVEL_REQUIREMENTS: Partial<Record<BuildingType, number>> = {
@@ -71,6 +72,7 @@ export const useGameStore = create<GameState>()(
         iron: 0,
         tools: 0,
         relics: 0,
+        waste: 0,
       },
       settlers: [
           { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.strong] },
@@ -101,6 +103,15 @@ export const useGameStore = create<GameState>()(
       isBuilding: false,
       tickRate: 1000,
       day: 1,
+      cameraTarget: null as string | null,
+      productionStats: {
+        wood: 0,
+        food: 0,
+        stone: 0,
+        iron: 0,
+        tools: 0,
+        relics: 0,
+      } as Record<ResourceType, number>,
       objectives: [
           {
               id: 'obj-wood',
@@ -138,6 +149,15 @@ export const useGameStore = create<GameState>()(
               complete: false,
               claimed: false,
           },
+          {
+              id: 'obj-monument',
+              title: 'Legacy of the Ancients',
+              description: 'Build an Ancient Monument to secure your place in history.',
+              goal: { type: 'building', key: 'monument', amount: 1 },
+              reward: { wood: 500, food: 500, stone: 500 },
+              complete: false,
+              claimed: false,
+          },
       ] as Objective[],
       unlockedResearch: [] as ResearchId[],
       currentResearch: null as ResearchId | null,
@@ -158,8 +178,12 @@ export const useGameStore = create<GameState>()(
 
       removeFloatingText: (id: string) => {
         set((state) => ({
-          floatingTexts: state.floatingTexts.filter(ft => ft.id !== id)
+          floatingTexts: state.floatingTexts.filter((t) => t.id !== id),
         }));
+      },
+
+      setCameraTarget: (id: string | null) => {
+        set({ cameraTarget: id });
       },
 
       addLog: (message: string, type: LogEntry['type'] = 'info') => {
@@ -305,6 +329,8 @@ export const useGameStore = create<GameState>()(
                 position,
                 level: 1,
                 lastCollected: Date.now(),
+                constructionProgress: 0,
+                inventory: { wood: 0, food: 0, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 },
               },
             ],
             isBuilding: false,
@@ -663,7 +689,27 @@ export const useGameStore = create<GameState>()(
           const maxStorage = baseStorage + additionalStorage;
 
           // Resource generation and Production Chains
+          let currentProduction: Record<ResourceType, number> = {
+            wood: 0,
+            food: 0,
+            stone: 0,
+            iron: 0,
+            tools: 0,
+            relics: 0,
+            waste: 0,
+          };
+
           (state.buildings || []).forEach((b) => {
+            // Only finished buildings produce resources
+            if (b.constructionProgress !== undefined && b.constructionProgress < 1) {
+              // Progress construction if workers are assigned or auto-progress
+              const buildingWorkers = state.settlers.filter(s => s.job === b.id);
+              if (buildingWorkers.length > 0) {
+                b.constructionProgress = Math.min(1, b.constructionProgress + 0.05);
+              }
+              return;
+            }
+
             const gen = RESOURCE_GENERATION[b.type];
             if (!gen) return;
 
@@ -679,24 +725,42 @@ export const useGameStore = create<GameState>()(
               if (newResources.wood >= woodCost && newResources.iron >= ironCost) {
                 newResources.wood -= woodCost;
                 newResources.iron -= ironCost;
-                newResources.tools = Math.min(maxStorage, newResources.tools + 0.05 * b.level * toolMultiplier);
+                currentProduction.wood -= woodCost;
+                currentProduction.iron -= ironCost;
+                const gain = 0.05 * b.level * toolMultiplier;
+                newResources.tools = Math.min(maxStorage, newResources.tools + gain);
+                currentProduction.tools += gain;
               }
             }
 
             // Bakery production: Food -> Better Food
             if (b.type === 'bakery' && buildingWorkers.length > 0) {
+              const hasWell = (state.buildings || []).some(wb => wb.type === 'well' && (wb.constructionProgress === undefined || wb.constructionProgress >= 1));
               const foodCost = 0.2 * b.level;
-              if (newResources.food >= foodCost) {
+              if (hasWell && newResources.food >= foodCost) {
                 newResources.food -= foodCost;
-                newResources.food = Math.min(maxStorage, newResources.food + 0.5 * b.level * toolMultiplier);
+                currentProduction.food -= foodCost;
+                const gain = 0.5 * b.level * toolMultiplier;
+                newResources.food = Math.min(maxStorage, newResources.food + gain);
+                currentProduction.food += gain;
+              } else if (!hasWell && Math.random() < 0.01) {
+                get().addLog("Bakery needs a Well nearby to operate at full capacity.", "warning");
               }
             }
 
             (Object.keys(gen) as ResourceType[]).forEach((res) => {
               const amount = (gen[res] || 0) * b.level * 0.1 * toolMultiplier;
-              newResources[res] = Math.min(maxStorage, newResources[res] + amount);
+              const localLimit = 50 * b.level;
+              b.inventory[res] = Math.min(localLimit, (b.inventory[res] || 0) + amount);
               
-              // Trigger floating text occasionally for production
+              // Waste generation from production
+              if (res === 'iron' || res === 'stone' || b.type === 'workshop') {
+                const wasteAmount = 0.05 * b.level;
+                newResources.waste = Math.min(1000, newResources.waste + wasteAmount);
+                currentProduction.waste += wasteAmount;
+              }
+
+              // Trigger floating text occasionally for production (now internal)
               if (amount > 0 && Math.random() < 0.05) {
                 const color = res === 'wood' ? 'text-amber-400' : res === 'food' ? 'text-yellow-400' : res === 'stone' ? 'text-stone-300' : 'text-blue-300';
                 get().addFloatingText(`+${Math.floor(amount * 10)} ${res}`, [b.position[0], b.position[1] + 2, b.position[2]], color);
@@ -704,12 +768,89 @@ export const useGameStore = create<GameState>()(
             });
           });
 
-          // Tool equipping logic
+          // Waste Pit logic: Reduce global waste
+          const wastePitWorkers = state.settlers.filter(s => {
+            const jobBuilding = state.buildings.find(b => b.id === s.job);
+            return jobBuilding?.type === 'wastePit';
+          });
+          if (wastePitWorkers.length > 0) {
+            const wasteReduction = wastePitWorkers.length * 0.2;
+            newResources.waste = Math.max(0, newResources.waste - wasteReduction);
+            currentProduction.waste -= wasteReduction;
+          }
+
+          // Global waste impact
+          if (newResources.waste > 100) {
+            const penalty = (newResources.waste - 100) * 0.001;
+            newHappiness = Math.max(0, newHappiness - penalty);
+            if (Math.random() < penalty * 0.1) {
+              get().addLog("Pollution is making settlers unhappy.", "warning");
+            }
+          }
+
+          // Logistics Logic: Move resources from buildings to global storage
+          const logisticsWorkers = state.settlers.filter(s => {
+            const jobBuilding = state.buildings.find(b => b.id === s.job);
+            return jobBuilding?.type === 'warehouse' || jobBuilding?.type === 'barn';
+          });
+
+          const hasWarehouse = state.buildings.some(b => b.type === 'warehouse' && (b.constructionProgress === undefined || b.constructionProgress >= 1));
+          const logisticsEfficiency = hasWarehouse ? 1.0 : 0.4; // Better efficiency with a warehouse
+
+          if (logisticsWorkers.length > 0) {
+            const collectionPower = logisticsWorkers.length * 0.8 * logisticsEfficiency;
+            (state.buildings || []).forEach(b => {
+              // Don't collect from the storage buildings themselves
+              if (b.type === 'warehouse' || b.type === 'barn') return;
+              
+              (Object.keys(b.inventory) as ResourceType[]).forEach(res => {
+                if (b.inventory[res] > 0) {
+                  const toMove = Math.min(b.inventory[res], collectionPower);
+                  b.inventory[res] -= toMove;
+                  newResources[res] = Math.min(maxStorage, newResources[res] + toMove);
+                  currentProduction[res] += toMove;
+
+                  // Visual feedback: Assign "carrying" status to a worker
+                  const availableWorker = logisticsWorkers.find(w => !w.carrying);
+                  if (availableWorker) {
+                    availableWorker.carrying = res;
+                  }
+                }
+              });
+            });
+          }
+
+          // Clear carrying status for workers who aren't working/logistics anymore or after some time
+          newSettlers = newSettlers.map(s => {
+            if (s.carrying && Math.random() < 0.1) {
+              s.carrying = undefined;
+            }
+            return s;
+          });
+
+          // Tool equipping and health logic
+          newSettlers = newSettlers.map(s => {
+            if (s.hasTool) {
+              s.toolHealth = (s.toolHealth || 100) - 0.05; // Tools degrade over time
+              if (s.toolHealth <= 0) {
+                s.hasTool = false;
+                s.toolHealth = 0;
+                get().addLog(`${s.name}'s tool has broken!`, 'warning');
+              }
+            }
+            return s;
+          });
+
           if (newResources.tools >= 1) {
             const workerWithoutTool = newSettlers.find(s => s.job && !s.hasTool);
             if (workerWithoutTool) {
               newResources.tools -= 1;
+              currentProduction.tools -= 1;
               workerWithoutTool.hasTool = true;
+              workerWithoutTool.toolHealth = 100;
+              const workplace = (state.buildings || []).find(b => b.id === workerWithoutTool.job);
+              const pos = workplace ? workplace.position : workerWithoutTool.position;
+              get().addFloatingText(`Equipped Tool!`, [pos[0], pos[1] + 2.5, pos[2]], 'text-blue-400');
               get().addLog(`${workerWithoutTool.name} equipped a tool for better efficiency!`, 'success');
             }
           }
@@ -748,6 +889,7 @@ export const useGameStore = create<GameState>()(
                     actionTimer: 0,
                     hunger: 100,
                     energy: 100,
+                    health: 100,
                     traits: getRandomTraits(),
                   };
                   newSettlers.push(newSettler);
@@ -770,6 +912,11 @@ export const useGameStore = create<GameState>()(
 
               get().addLog(message, type);
               exp.status = 'returned';
+              
+              // Visual feedback for return
+              const barn = (state.buildings || []).find(b => b.type === 'barn');
+              const pos = barn ? barn.position : [0, 2, 0];
+              get().addFloatingText("Expedition Returned!", [pos[0], pos[1] + 3, pos[2]], type === 'success' ? 'text-green-400' : type === 'danger' ? 'text-red-400' : 'text-blue-400');
             }
           });
 
@@ -779,6 +926,7 @@ export const useGameStore = create<GameState>()(
           // Food consumption
           const foodCost = (state.settlers || []).length * 0.04;
           newResources.food = Math.max(0, newResources.food - foodCost);
+          currentProduction.food -= foodCost;
           if (newResources.food <= 0.1) {
             newHappiness = Math.max(0, newHappiness - 0.5);
           } else {
@@ -927,6 +1075,59 @@ export const useGameStore = create<GameState>()(
               currentSettler.energy = Math.min(100, currentSettler.energy + 0.1);
             }
 
+            // Health and Sickness Logic
+            const hasInfirmaryStaffed = (state.buildings || []).some(b => 
+                b.type === 'infirmary' && state.settlers.some(s => s.job === b.id)
+            );
+
+            // Chance to get sick (higher if low hunger/energy or bad weather)
+            if (!currentSettler.isSick && Math.random() < 0.0005) {
+                let sicknessChance = 0.01;
+                if (currentSettler.hunger < 30) sicknessChance += 0.05;
+                if (currentSettler.energy < 30) sicknessChance += 0.05;
+                if (state.weather !== 'sunny') sicknessChance += 0.02;
+                
+                if (Math.random() < sicknessChance) {
+                    currentSettler.isSick = true;
+                    get().addLog(`${currentSettler.name} has fallen ill!`, 'warning');
+                }
+            }
+
+            // Health decay/gain
+            let healthChange = 0;
+            if (currentSettler.isSick) {
+                healthChange -= 0.1;
+                if (hasInfirmaryStaffed) healthChange += 0.15; // Net gain if infirmary is active
+            } else {
+                if (currentSettler.hunger > 80 && currentSettler.energy > 80) healthChange += 0.05;
+                if (currentSettler.hunger < 10) healthChange -= 0.05;
+            }
+
+            // Global health boost from active infirmary
+            if (hasInfirmaryStaffed) healthChange += 0.02;
+
+            // Monument Happiness and Health Aura
+            const hasMonument = (state.buildings || []).some(b => b.type === 'monument');
+            if (hasMonument) {
+              newHappiness = Math.min(100, newHappiness + 0.05);
+              healthChange += 0.01;
+            }
+
+            currentSettler.health = Math.max(0, Math.min(100, (currentSettler.health || 100) + healthChange));
+
+            // Recovery from sickness
+            if (currentSettler.isSick && currentSettler.health > 90 && Math.random() < 0.01) {
+                currentSettler.isSick = false;
+                get().addLog(`${currentSettler.name} has recovered from illness!`, 'success');
+            }
+
+            // Death logic
+            if (currentSettler.health <= 0) {
+                get().addLog(`${currentSettler.name} has passed away.`, 'danger');
+                newHappiness = Math.max(0, newHappiness - 20);
+                return null;
+            }
+
             if (currentSettler.hunger < 20) newHappiness = Math.max(0, newHappiness - 0.2);
             if (currentSettler.energy < 20) newHappiness = Math.max(0, newHappiness - 0.1);
             if (currentSettler.hunger > 70 && currentSettler.energy > 70) newHappiness = Math.min(100, newHappiness + 0.05);
@@ -936,7 +1137,7 @@ export const useGameStore = create<GameState>()(
             }
 
             return currentSettler;
-          });
+          }).filter((s): s is Settler => s !== null);
 
           // Research progression
           if (state.currentResearch) {
@@ -966,6 +1167,7 @@ export const useGameStore = create<GameState>()(
                 researchProgress: 0,
                 tradeOffers: newTradeOffers,
                 lastTradeRefresh: newLastTradeRefresh,
+                productionStats: currentProduction,
               };
             } else {
               return {
@@ -988,6 +1190,7 @@ export const useGameStore = create<GameState>()(
                 researchProgress: progressed,
                 tradeOffers: newTradeOffers,
                 lastTradeRefresh: newLastTradeRefresh,
+                productionStats: currentProduction,
               };
             }
           }
@@ -1027,6 +1230,7 @@ export const useGameStore = create<GameState>()(
             researchProgress: state.researchProgress,
             tradeOffers: newTradeOffers,
             lastTradeRefresh: newLastTradeRefresh,
+            productionStats: currentProduction,
           };
         });
       },
@@ -1052,10 +1256,11 @@ export const useGameStore = create<GameState>()(
                 iron: 0,
                 tools: 0,
                 relics: 0,
+                waste: 0,
             },
             settlers: [
-                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.strong] },
-                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.fast] },
+                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, health: 100, traits: [TRAIT_DEFINITIONS.strong] },
+                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, health: 100, traits: [TRAIT_DEFINITIONS.fast] },
             ] as Settler[],
             happiness: 100,
             buildings: [initialBarn] as Building[],
@@ -1067,6 +1272,16 @@ export const useGameStore = create<GameState>()(
             selectedBuildingId: null,
             isBuilding: false,
             day: 1,
+            cameraTarget: null as string | null,
+            productionStats: {
+              wood: 0,
+              food: 0,
+              stone: 0,
+              iron: 0,
+              tools: 0,
+              relics: 0,
+              waste: 0,
+            } as Record<ResourceType, number>,
             tickRate: 1000,
             expeditions: [],
             floatingTexts: [],

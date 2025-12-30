@@ -1,4 +1,4 @@
-export type ResourceType = 'wood' | 'food' | 'stone' | 'iron' | 'tools' | 'relics';
+export type ResourceType = 'wood' | 'food' | 'stone' | 'iron' | 'tools' | 'relics' | 'waste';
 
 export interface Resources {
   wood: number;
@@ -7,9 +7,10 @@ export interface Resources {
   iron: number;
   tools: number;
   relics: number;
+  waste: number;
 }
 
-export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery' | 'workshop' | 'infirmary' | 'tradingPost';
+export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery' | 'workshop' | 'infirmary' | 'tradingPost' | 'monument' | 'wastePit';
 
 export interface Building {
   id: string;
@@ -17,6 +18,8 @@ export interface Building {
   position: [number, number, number];
   level: number;
   lastCollected?: number;
+  constructionProgress?: number; // 0..1, 1 is finished
+  inventory: Resources; // Internal storage before collection
 }
 
 export type NatureType = 'tree' | 'rock';
@@ -36,8 +39,12 @@ export interface Settler {
   actionTimer: number; // Time until next state change or action completion
   hunger: number; // 0-100, lower is hungrier
   energy: number; // 0-100, lower is tired
+  health: number; // 0-100, lower is sick/injured
+  isSick?: boolean;
   traits: Trait[];
   hasTool?: boolean;
+  toolHealth?: number; // 0..100
+  carrying?: ResourceType; // Resource being transported
 }
 
 export type TraitType = 'strong' | 'fast' | 'glutton' | 'ascetic' | 'insomniac' | 'workaholic';
@@ -89,7 +96,7 @@ export interface Objective {
   claimed: boolean;
 }
 
-export type ResearchId = 'toolmaking' | 'herbalism' | 'fishing' | 'fortifications' | 'baking';
+export type ResearchId = 'toolmaking' | 'herbalism' | 'fishing' | 'fortifications' | 'baking' | 'archaeology';
 
 export interface ResearchTopic {
   id: ResearchId;
@@ -154,6 +161,8 @@ export interface GameState {
   isBuilding: boolean;
   tickRate: number;
   day: number;
+  cameraTarget: string | null; // settlerId or buildingId
+  productionStats: Record<ResourceType, number>; // Net gain in last few ticks
   objectives: Objective[];
   unlockedResearch: ResearchId[];
   currentResearch: ResearchId | null;
@@ -185,6 +194,7 @@ export interface GameState {
   refreshTrades: () => void;
   addFloatingText: (text: string, position: [number, number, number], color?: string) => void;
   removeFloatingText: (id: string) => void;
+  setCameraTarget: (id: string | null) => void;
   loadSaveData: (data: Partial<GameSaveData>) => void;
   tick: () => void;
   reset: () => void;
@@ -205,6 +215,8 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   workshop: { wood: 80, stone: 30, iron: 10 },
   infirmary: { wood: 70, stone: 50 },
   tradingPost: { wood: 100, stone: 20, food: 50 },
+  monument: { stone: 200, relics: 5 },
+  wastePit: { wood: 40, stone: 20 },
 };
 
 export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number; happiness?: number }> = {
@@ -222,6 +234,8 @@ export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: 
   workshop: { workers: 1 },
   infirmary: { workers: 1, happiness: 0.6 },
   tradingPost: { workers: 1 },
+  monument: { happiness: 5.0 },
+  wastePit: { workers: 1 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
@@ -239,6 +253,8 @@ export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
   workshop: { wood: 1, stone: 1 },
   infirmary: { },
   tradingPost: { },
+  monument: { },
+  wastePit: { waste: -5 },
 };
 
 export const RESEARCH_TREE: ResearchTopic[] = [
@@ -277,6 +293,13 @@ export const RESEARCH_TREE: ResearchTopic[] = [
     cost: { wood: 70, stone: 30 },
     barnLevelReq: 2,
   },
+  {
+    id: 'archaeology',
+    name: 'Archaeology',
+    description: 'Study ancient relics to unlock the Monument.',
+    cost: { relics: 2, stone: 100 },
+    barnLevelReq: 3,
+  },
 ];
 
 export const BUILDING_RESEARCH_REQ: Partial<Record<BuildingType, ResearchId>> = {
@@ -285,6 +308,7 @@ export const BUILDING_RESEARCH_REQ: Partial<Record<BuildingType, ResearchId>> = 
   bakery: 'baking',
   workshop: 'toolmaking',
   infirmary: 'herbalism',
+  monument: 'archaeology',
 };
 
 export const BUILDING_WORKSTATIONS: Record<BuildingType, [number, number, number][] | undefined> = {
@@ -302,4 +326,6 @@ export const BUILDING_WORKSTATIONS: Record<BuildingType, [number, number, number
   workshop: [[0, 0, 1]],
   infirmary: [[0, 0, 1]],
   tradingPost: [[0, 0, 1]],
+  monument: [],
+  wastePit: [[0, 0, 0.8]],
 };

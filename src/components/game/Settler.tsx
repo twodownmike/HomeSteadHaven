@@ -4,7 +4,8 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Settler as SettlerType } from '../../types';
 import { useGameStore } from '../../store';
-import { Utensils, Zap } from 'lucide-react';
+import { useAudioManager } from '../../hooks/useAudio';
+import { Utensils, Zap, Pill } from 'lucide-react';
 
 interface SettlerProps {
     settler: SettlerType;
@@ -12,7 +13,9 @@ interface SettlerProps {
 
 export const Settler: React.FC<SettlerProps> = ({ settler }) => {
     const buildings = useGameStore(state => state.buildings);
+    const { playSound } = useAudioManager();
     const groupRef = useRef<THREE.Group>(null);
+    const lastHammerSound = useRef<number>(0);
     const bodyRef = useRef<THREE.Group>(null);
     const leftArmRef = useRef<THREE.Mesh>(null);
     const rightArmRef = useRef<THREE.Mesh>(null);
@@ -73,9 +76,26 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
             if (leftLegRef.current) leftLegRef.current.rotation.x = Math.sin(time * walkSpeed) * walkAmount;
             if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(time * walkSpeed + Math.PI) * walkAmount;
             
-            // Arm movement
-            if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(time * walkSpeed + Math.PI) * walkAmount;
-            if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(time * walkSpeed) * walkAmount;
+            // Arm movement - if carrying, arms are fixed forward
+            if (settler.carrying) {
+                if (leftArmRef.current) {
+                    leftArmRef.current.rotation.x = -Math.PI / 3;
+                    leftArmRef.current.rotation.y = 0.2;
+                }
+                if (rightArmRef.current) {
+                    rightArmRef.current.rotation.x = -Math.PI / 3;
+                    rightArmRef.current.rotation.y = -0.2;
+                }
+            } else {
+                if (leftArmRef.current) {
+                    leftArmRef.current.rotation.x = Math.sin(time * walkSpeed + Math.PI) * walkAmount;
+                    leftArmRef.current.rotation.y = 0;
+                }
+                if (rightArmRef.current) {
+                    rightArmRef.current.rotation.x = Math.sin(time * walkSpeed) * walkAmount;
+                    rightArmRef.current.rotation.y = 0;
+                }
+            }
             
             // Body bob
             if (bodyRef.current) bodyRef.current.position.y = Math.abs(Math.sin(time * walkSpeed)) * 0.05;
@@ -101,6 +121,21 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
                 if (rightArmRef.current) {
                     rightArmRef.current.position.z = saw;
                     rightArmRef.current.rotation.x = -Math.PI / 3;
+                }
+            } else if (workplace?.constructionProgress !== undefined && workplace.constructionProgress < 1) {
+                // Construction hammering motion
+                const hammer = Math.sin(time * 12);
+                if (rightArmRef.current) {
+                    rightArmRef.current.rotation.x = -Math.PI / 2 + hammer * 0.8;
+                }
+                if (bodyRef.current) {
+                    bodyRef.current.rotation.x = Math.max(0, hammer * 0.1);
+                }
+                
+                // Trigger hammer sound at the bottom of the swing
+                if (hammer < -0.8 && time - lastHammerSound.current > 0.4) {
+                    playSound('hammer');
+                    lastHammerSound.current = time;
                 }
             } else {
                 // Default Chopping/Hammering motion
@@ -178,6 +213,25 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
                         </group>
                     )}
                 </mesh>
+
+                {/* Carrying Visual (Box) */}
+                {settler.carrying && (
+                    <group position={[0, 0.5, 0.25]}>
+                        <mesh castShadow>
+                            <boxGeometry args={[0.25, 0.2, 0.2]} />
+                            <meshStandardMaterial 
+                                color={
+                                    settler.carrying === 'wood' ? '#78350f' :
+                                    settler.carrying === 'food' ? '#fde047' :
+                                    settler.carrying === 'stone' ? '#78716c' :
+                                    settler.carrying === 'iron' ? '#475569' :
+                                    settler.carrying === 'tools' ? '#3b82f6' :
+                                    '#451a03'
+                                } 
+                            />
+                        </mesh>
+                    </group>
+                )}
             </group>
 
             {/* Left Leg */}
@@ -206,9 +260,14 @@ export const Settler: React.FC<SettlerProps> = ({ settler }) => {
                                 <Zap className="w-3 h-3 text-white" />
                             </div>
                         )}
+                        {settler.isSick && (
+                            <div className="bg-red-500/80 p-0.5 rounded shadow-lg animate-pulse">
+                                <Pill className="w-3 h-3 text-white" />
+                            </div>
+                        )}
                     </div>
                     <div className="bg-black/50 text-white text-[10px] px-1 rounded backdrop-blur-sm whitespace-nowrap">
-                        {settler.name}
+                        {settler.name} {settler.carrying && <span className="text-yellow-400 ml-1">({settler.carrying})</span>}
                     </div>
                 </div>
             </Html>
