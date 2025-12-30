@@ -48,6 +48,7 @@ export const GameUI: React.FC = () => {
     startResearch,
     cancelResearch,
     tradeOffers,
+    lastTradeRefresh,
     acceptTrade,
   } = useGameStore();
   const [showMenu, setShowMenu] = useState(false);
@@ -177,6 +178,8 @@ export const GameUI: React.FC = () => {
       unlockedResearch,
       currentResearch,
       researchProgress,
+      tradeOffers,
+      lastTradeRefresh,
     });
     setIsSaving(false);
   };

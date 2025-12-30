@@ -110,6 +110,8 @@ export interface GameSaveData {
   unlockedResearch: ResearchId[];
   currentResearch: ResearchId | null;
   researchProgress: number;
+  tradeOffers: TradeOffer[];
+  lastTradeRefresh: number;
 }
 
 export interface TradeOffer {
