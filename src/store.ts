@@ -111,6 +111,7 @@ export const useGameStore = create<GameState>()(
         iron: 0,
         tools: 0,
         relics: 0,
+        waste: 0,
       } as Record<ResourceType, number>,
       objectives: [
           {
@@ -1295,18 +1296,67 @@ export const useGameStore = create<GameState>()(
     {
       name: 'homestead-storage', // name of the item in the storage (must be unique)
       version: 2,
-      migrate: (persistedState, _version) => {
+      migrate: (persistedState) => {
         const state = persistedState as GameState;
+        
+        // Ensure resources object exists and has all keys
+        if (!state.resources) {
+          state.resources = { wood: 100, food: 50, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 };
+        } else {
+          state.resources.waste = state.resources.waste || 0;
+          state.resources.relics = state.resources.relics || 0;
+          state.resources.tools = state.resources.tools || 0;
+        }
+
+        // Ensure productionStats exists and has all keys
+        if (!state.productionStats) {
+          state.productionStats = { wood: 0, food: 0, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 };
+        } else {
+          (Object.keys(state.resources) as ResourceType[]).forEach(res => {
+            if (state.productionStats[res] === undefined) {
+              state.productionStats[res] = 0;
+            }
+          });
+        }
+
         if (!state.buildings) state.buildings = [];
         if (!(state.buildings || []).some((b) => b.type === 'barn')) {
           state.buildings = [initialBarn, ...state.buildings];
         }
+
+        if (state.buildings) {
+          state.buildings = state.buildings.map(b => ({
+            ...b,
+            inventory: b.inventory || { wood: 0, food: 0, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 }
+          }));
+        }
+
         if (state.settlers) {
           state.settlers = state.settlers.map(s => ({
             ...s,
-            traits: s.traits || []
+            traits: s.traits || [],
+            health: s.health || 100,
+            toolHealth: s.toolHealth || 100
           }));
         }
+        
+        if (state.objectives) {
+          // Ensure new objectives are added to old saves
+          const initialObjectives: Objective[] = [
+            { id: 'obj-wood', title: 'Gatherer', description: 'Stockpile 150 wood to prove the village can build.', goal: { type: 'resource', key: 'wood', amount: 150 }, reward: { food: 40 }, complete: false, claimed: false },
+            { id: 'obj-farm', title: 'First Harvest', description: 'Build a farm to secure food.', goal: { type: 'building', key: 'farm', amount: 1 }, reward: { wood: 60, food: 30 }, complete: false, claimed: false },
+            { id: 'obj-pop', title: 'New Neighbors', description: 'Reach 6 settlers in your homestead.', goal: { type: 'population', amount: 6 }, reward: { stone: 50, food: 50 }, complete: false, claimed: false },
+            { id: 'obj-happy', title: 'Joyous Village', description: 'Raise happiness to 85% or higher.', goal: { type: 'happiness', amount: 85 }, reward: { wood: 80, iron: 20 }, complete: false, claimed: false },
+            { id: 'obj-monument', title: 'Legacy of the Ancients', description: 'Build an Ancient Monument to secure your place in history.', goal: { type: 'building', key: 'monument', amount: 1 }, reward: { wood: 500, food: 500, stone: 500 }, complete: false, claimed: false },
+          ];
+          
+          initialObjectives.forEach(obj => {
+            if (!state.objectives.find(o => o.id === obj.id)) {
+              state.objectives.push(obj);
+            }
+          });
+        }
+
         return state;
       },
       partialize: (state) => ({ 
@@ -1326,6 +1376,7 @@ export const useGameStore = create<GameState>()(
         researchProgress: state.researchProgress,
         tradeOffers: state.tradeOffers,
         lastTradeRefresh: state.lastTradeRefresh,
+        productionStats: state.productionStats,
       }), // only persist these fields
     }
   )
