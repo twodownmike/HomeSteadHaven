@@ -129,6 +129,8 @@ export interface GameSaveData {
   researchProgress: number;
   tradeOffers: TradeOffer[];
   lastTradeRefresh: number;
+  expeditions: Expedition[];
+  productionStats: Record<ResourceType, number>;
 }
 
 export interface TradeOffer {

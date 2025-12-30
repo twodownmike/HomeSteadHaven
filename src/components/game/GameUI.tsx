@@ -232,6 +232,8 @@ export const GameUI: React.FC = () => {
       researchProgress,
       tradeOffers,
       lastTradeRefresh,
+      expeditions,
+      productionStats,
     });
     setIsSaving(false);
   };

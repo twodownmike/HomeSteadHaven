@@ -644,17 +644,22 @@ export const useGameStore = create<GameState>()(
           ? incomingBuildings
           : [initialBarn, ...incomingBuildings];
         
-        // Ensure settlers have traits
+        // Ensure settlers have traits and health
         const incomingSettlers = (data.settlers || current.settlers).map(s => ({
           ...s,
-          traits: s.traits || []
+          traits: s.traits || [],
+          health: s.health || 100,
+          toolHealth: s.toolHealth || 100
         }));
 
         set({
           resources: data.resources || current.resources,
           settlers: incomingSettlers,
           happiness: data.happiness ?? current.happiness,
-          buildings: ensureBarnBuildings,
+          buildings: ensureBarnBuildings.map(b => ({
+            ...b,
+            inventory: b.inventory || { wood: 0, food: 0, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 }
+          })),
           nature: data.nature || current.nature,
           logs: data.logs || current.logs,
           weather: data.weather || current.weather,
@@ -666,6 +671,8 @@ export const useGameStore = create<GameState>()(
           researchProgress: data.researchProgress ?? current.researchProgress,
           tradeOffers: data.tradeOffers || [],
           lastTradeRefresh: data.lastTradeRefresh || 0,
+          expeditions: data.expeditions || [],
+          productionStats: data.productionStats || current.productionStats,
           selectedBuilding: null,
           selectedBuildingId: null,
           isBuilding: false,
@@ -689,6 +696,10 @@ export const useGameStore = create<GameState>()(
           );
           const maxStorage = baseStorage + additionalStorage;
 
+          const newDay = state.day + 0.005;
+          const seasonRoll = newDay % 4;
+          newSeason = seasonRoll < 1 ? 'spring' : seasonRoll < 2 ? 'summer' : seasonRoll < 3 ? 'autumn' : 'winter';
+
           // Resource generation and Production Chains
           let currentProduction: Record<ResourceType, number> = {
             wood: 0,
@@ -709,6 +720,11 @@ export const useGameStore = create<GameState>()(
                 b.constructionProgress = Math.min(1, b.constructionProgress + 0.05);
               }
               return;
+            }
+
+            // Ensure inventory exists
+            if (!b.inventory) {
+              b.inventory = { wood: 0, food: 0, stone: 0, iron: 0, tools: 0, relics: 0, waste: 0 };
             }
 
             const gen = RESOURCE_GENERATION[b.type];
@@ -939,9 +955,6 @@ export const useGameStore = create<GameState>()(
             const options: WeatherType[] = ['sunny', 'rain', 'snow'];
             newWeather = options[Math.floor(Math.random() * options.length)];
           }
-          const newDay = state.day + 0.005;
-          const seasonRoll = newDay % 4;
-          newSeason = seasonRoll < 1 ? 'spring' : seasonRoll < 2 ? 'summer' : seasonRoll < 3 ? 'autumn' : 'winter';
 
           // Trading Post logic
           let newTradeOffers = state.tradeOffers || [];
