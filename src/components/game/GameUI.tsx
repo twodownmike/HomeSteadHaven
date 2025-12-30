@@ -75,39 +75,39 @@ export const GameUI: React.FC = () => {
     }
   };
 
-  const selectedBuildingData = selectedBuildingId ? buildings.find(b => b.id === selectedBuildingId) : null;
+  const selectedBuildingData = selectedBuildingId ? (buildings || []).find(b => b.id === selectedBuildingId) : null;
   const upgradeCost = selectedBuildingData ? BUILDING_COSTS[selectedBuildingData.type] : null;
   const upgradeMultiplier = selectedBuildingData ? selectedBuildingData.level + 1 : 1;
   const selectedStats = selectedBuildingData ? BUILDING_STATS[selectedBuildingData.type] : null;
-  const assignedWorkers = selectedBuildingData ? settlers.filter(s => s.job === selectedBuildingData.id).length : 0;
-  const barn = buildings.find(b => b.type === 'barn');
+  const assignedWorkers = selectedBuildingData ? (settlers || []).filter(s => s.job === selectedBuildingData.id).length : 0;
+  const barn = (buildings || []).find(b => b.type === 'barn');
 
   const canAffordUpgrade = upgradeCost && Object.keys(upgradeCost).every(res => {
       const type = res as ResourceType;
-      return resources[type] >= (upgradeCost[type] || 0) * upgradeMultiplier;
+      return (resources?.[type] || 0) >= (upgradeCost[type] || 0) * upgradeMultiplier;
   });
 
-  const canFestival = resources.wood >= 30 && resources.food >= 40;
-  const canExpedition = resources.food >= 25 && resources.wood >= 15;
-  const avgHunger = settlers.length ? Math.round(settlers.reduce((a,s)=>a+s.hunger,0)/settlers.length) : 100;
-  const avgEnergy = settlers.length ? Math.round(settlers.reduce((a,s)=>a+s.energy,0)/settlers.length) : 100;
-  const lowNeeds = settlers.filter(s => s.hunger < 30 || s.energy < 30).length;
+  const canFestival = (resources?.wood || 0) >= 30 && (resources?.food || 0) >= 40;
+  const canExpedition = (resources?.food || 0) >= 25 && (resources?.wood || 0) >= 15;
+  const avgHunger = (settlers || []).length ? Math.round(settlers.reduce((a,s)=>a+(s.hunger || 0),0)/settlers.length) : 100;
+  const avgEnergy = (settlers || []).length ? Math.round(settlers.reduce((a,s)=>a+(s.energy || 0),0)/settlers.length) : 100;
+  const lowNeeds = (settlers || []).filter(s => (s.hunger || 0) < 30 || (s.energy || 0) < 30).length;
 
   const objectiveProgress = (obj: Objective) => {
       const { goal } = obj;
       if (goal.type === 'resource' && goal.key) {
-          const current = resources[goal.key as ResourceType];
+          const current = resources?.[goal.key as ResourceType] || 0;
           return Math.min(current / goal.amount, 1);
       }
       if (goal.type === 'building' && goal.key) {
-          const count = buildings.filter(b => b.type === goal.key).length;
+          const count = (buildings || []).filter(b => b.type === goal.key).length;
           return Math.min(count / goal.amount, 1);
       }
       if (goal.type === 'population') {
-          return Math.min(settlers.length / goal.amount, 1);
+          return Math.min((settlers || []).length / goal.amount, 1);
       }
       if (goal.type === 'happiness') {
-          return Math.min(happiness / goal.amount, 1);
+          return Math.min((happiness || 0) / goal.amount, 1);
       }
       return 0;
   };
@@ -115,18 +115,18 @@ export const GameUI: React.FC = () => {
   const objectiveProgressLabel = (obj: Objective) => {
       const { goal } = obj;
       if (goal.type === 'resource' && goal.key) {
-          const current = Math.floor(resources[goal.key as ResourceType]);
+          const current = Math.floor(resources?.[goal.key as ResourceType] || 0);
           return `${current}/${goal.amount}`;
       }
       if (goal.type === 'building' && goal.key) {
-          const count = buildings.filter(b => b.type === goal.key).length;
+          const count = (buildings || []).filter(b => b.type === goal.key).length;
           return `${count}/${goal.amount}`;
       }
       if (goal.type === 'population') {
-          return `${settlers.length}/${goal.amount}`;
+          return `${(settlers || []).length}/${goal.amount}`;
       }
       if (goal.type === 'happiness') {
-          return `${Math.floor(happiness)}% / ${goal.amount}%`;
+          return `${Math.floor(happiness || 0)}% / ${goal.amount}%`;
       }
       return '';
   };
@@ -353,12 +353,12 @@ export const GameUI: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {RESEARCH_TREE.map((topic) => {
-              const unlocked = unlockedResearch.includes(topic.id);
+            {(RESEARCH_TREE || []).map((topic) => {
+              const unlocked = (unlockedResearch || []).includes(topic.id);
               const inProgress = currentResearch === topic.id;
-              const barnReqMet = (barn?.level || 0) >= topic.barnLevelReq;
-              const canAfford = (Object.keys(topic.cost) as ResourceType[]).every(
-                (r) => resources[r] >= (topic.cost[r] || 0)
+              const barnReqMet = ((barn as any)?.level || 0) >= topic.barnLevelReq;
+              const canAfford = (Object.keys(topic.cost || {}) as ResourceType[]).every(
+                (r) => (resources?.[r] || 0) >= (topic.cost?.[r] || 0)
               );
               const disabled = unlocked || inProgress || !barnReqMet || !canAfford;
               return (
@@ -372,9 +372,9 @@ export const GameUI: React.FC = () => {
                   </div>
                   <div className="text-xs text-gray-200 flex flex-wrap gap-2">
                     <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">Barn lvl {topic.barnLevelReq}</span>
-                    {(Object.entries(topic.cost) as [string, number][])
+                    {(Object.entries(topic.cost || {}) as [string, number][])
                       .map(([res, amt]) => (
-                        <span key={res} className={`px-2 py-1 rounded-full border ${resources[res as ResourceType] < amt ? 'border-red-400/60 text-red-200' : 'border-white/20 text-white'}`}>
+                        <span key={res} className={`px-2 py-1 rounded-full border ${(resources?.[res as ResourceType] || 0) < amt ? 'border-red-400/60 text-red-200' : 'border-white/20 text-white'}`}>
                           {amt} {res}
                         </span>
                       ))}
@@ -427,8 +427,8 @@ export const GameUI: React.FC = () => {
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {settlers.map(settler => {
-                const jobBuilding = settler.job ? buildings.find(b => b.id === settler.job) : null;
+            {(settlers || []).map(settler => {
+                const jobBuilding = settler.job ? (buildings || []).find(b => b.id === settler.job) : null;
                 
                 return (
                     <div key={settler.id} className="p-3 rounded-xl border border-white/10 bg-white/5 flex flex-col gap-2">
@@ -452,19 +452,19 @@ export const GameUI: React.FC = () => {
                             <div className="flex flex-col gap-1">
                                 <div className="flex items-center gap-1 text-xs text-gray-300">
                                     <Utensils className="w-3 h-3 text-orange-300" />
-                                    <span>{Math.floor(settler.hunger)}%</span>
+                                    <span>{Math.floor(settler.hunger || 0)}%</span>
                                 </div>
                                 <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-orange-400" style={{ width: `${settler.hunger}%` }} />
+                                    <div className="h-full bg-orange-400" style={{ width: `${settler.hunger || 0}%` }} />
                                 </div>
                             </div>
                             <div className="flex flex-col gap-1">
                                 <div className="flex items-center gap-1 text-xs text-gray-300">
                                     <Zap className="w-3 h-3 text-yellow-300" />
-                                    <span>{Math.floor(settler.energy)}%</span>
+                                    <span>{Math.floor(settler.energy || 0)}%</span>
                                 </div>
                                 <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-yellow-400" style={{ width: `${settler.energy}%` }} />
+                                    <div className="h-full bg-yellow-400" style={{ width: `${settler.energy || 0}%` }} />
                                 </div>
                             </div>
                         </div>
@@ -473,7 +473,7 @@ export const GameUI: React.FC = () => {
                             <div className="mt-2 pt-2 border-t border-white/5">
                                 <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1">Traits</div>
                                 <div className="flex flex-wrap gap-1">
-                                    {settler.traits.map((trait, i) => (
+                                    {(settler.traits || []).map((trait, i) => (
                                         <div key={i} className="group relative cursor-help">
                                             <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30">
                                                 {trait.name}
@@ -496,7 +496,7 @@ export const GameUI: React.FC = () => {
 
       {/* Event Logs */}
       <div className="absolute bottom-32 left-3 sm:left-4 flex flex-col gap-2 w-[300px] pointer-events-none opacity-80">
-          {logs.slice(0, 5).map((log) => (
+          {(logs || []).slice(0, 5).map((log) => (
               <div 
                 key={log.id}
                 className={`
@@ -582,24 +582,24 @@ export const GameUI: React.FC = () => {
               </div>
             </button>
 
-            {selectedBuildingData.type === 'tradingPost' && (
+            {selectedBuildingData?.type === 'tradingPost' && (
               <div className="flex flex-col gap-2 bg-white/5 border border-white/10 rounded-xl p-3">
                 <div className="flex items-center justify-between">
                    <h4 className="font-bold text-sm text-amber-300">Active Trade Offers</h4>
                    <span className="text-[10px] text-gray-400">Refreshes every 3 days</span>
                 </div>
-                {tradeOffers.length === 0 ? (
+                {(!tradeOffers || tradeOffers.length === 0) ? (
                     <div className="text-xs text-gray-400 italic py-2 text-center">No traders currently available.</div>
                 ) : (
                     <div className="flex flex-col gap-2">
                         {tradeOffers.map(offer => {
-                            const canAfford = (Object.keys(offer.wants) as ResourceType[]).every(res => resources[res] >= (offer.wants[res] || 0));
+                            const canAfford = (Object.keys(offer.wants || {}) as ResourceType[]).every(res => (resources?.[res] || 0) >= (offer.wants?.[res] || 0));
                             return (
                                 <div key={offer.id} className="bg-black/20 rounded-lg p-2 flex items-center justify-between">
                                     <div className="flex flex-col text-xs gap-1">
                                         <div className="flex items-center gap-1 text-red-300">
                                             <span className="font-bold">Give:</span>
-                                            {Object.entries(offer.wants).map(([k, v]) => (
+                                            {Object.entries(offer.wants || {}).map(([k, v]) => (
                                                 <span key={k} className="flex items-center gap-0.5">
                                                     {v} <ResourceIcon type={k as ResourceType} />
                                                 </span>
@@ -607,7 +607,7 @@ export const GameUI: React.FC = () => {
                                         </div>
                                         <div className="flex items-center gap-1 text-green-300">
                                             <span className="font-bold">Get:</span>
-                                            {Object.entries(offer.gives).map(([k, v]) => (
+                                            {Object.entries(offer.gives || {}).map(([k, v]) => (
                                                 <span key={k} className="flex items-center gap-0.5">
                                                     {v} <ResourceIcon type={k as ResourceType} />
                                                 </span>
@@ -654,7 +654,7 @@ export const GameUI: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            {objectives.map((obj) => {
+            {(objectives || []).map((obj) => {
               const progress = objectiveProgress(obj);
               const label = objectiveProgressLabel(obj);
               const complete = obj.complete;
@@ -675,7 +675,7 @@ export const GameUI: React.FC = () => {
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-1 text-xs text-amber-200">
                       <Gift className="w-3 h-3" />
-                      {Object.entries(obj.reward).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
+                      {Object.entries(obj.reward || {}).map(([k,v]) => `${v} ${k[0].toUpperCase()}`).join(', ')}
                     </div>
                     {complete && !claimed && (
                       <button
@@ -714,12 +714,12 @@ export const GameUI: React.FC = () => {
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[320px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20">
-              {(Object.keys(BUILDING_COSTS) as BuildingType[]).map((type) => {
+            {(Object.keys(BUILDING_COSTS || {}) as BuildingType[]).map((type) => {
                 const costs = BUILDING_COSTS[type];
                 const perks = buildBenefits[type] || [];
                 const isSelected = selectedBuilding === type;
-                const canAfford = (Object.keys(costs) as ResourceType[]).every(
-                  (r) => resources[r] >= (costs[r] || 0)
+                const canAfford = (Object.keys(costs || {}) as ResourceType[]).every(
+                  (r) => (resources?.[r] || 0) >= (costs?.[r] || 0)
                 );
                 return (
                   <button
@@ -739,14 +739,14 @@ export const GameUI: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs text-gray-200">
-                      {Object.entries(costs).map(([res, amount]) => (
-                        <span key={res} className={`px-2 py-1 rounded-full border ${resources[res as ResourceType] < (amount as number) ? 'border-red-400/60 text-red-200' : 'border-white/20 text-white'}`}>
+                      {Object.entries(costs || {}).map(([res, amount]) => (
+                        <span key={res} className={`px-2 py-1 rounded-full border ${(resources?.[res as ResourceType] || 0) < (amount as number) ? 'border-red-400/60 text-red-200' : 'border-white/20 text-white'}`}>
                           {amount as number} {res}
                         </span>
                       ))}
                     </div>
                     <div className="flex flex-col gap-1 text-xs text-gray-300">
-                      {perks.length ? perks.map((p, i) => (
+                      {(perks && perks.length) ? perks.map((p, i) => (
                         <div key={i} className="flex items-start gap-2">
                           <span className="w-1.5 h-1.5 rounded-full bg-white/40 mt-1" />
                           <span>{p}</span>

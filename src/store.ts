@@ -152,14 +152,14 @@ export const useGameStore = create<GameState>()(
                   type
               };
               // Keep only last 20 logs
-              return { logs: [newLog, ...state.logs].slice(0, 20) };
+              return { logs: [newLog, ...(state.logs || [])].slice(0, 20) };
           });
       },
 
       addResource: (type: ResourceType, amount: number) =>
         set((state) => {
             const baseStorage = 100;
-            const additionalStorage = state.buildings.reduce((acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level), 0);
+            const additionalStorage = (state.buildings || []).reduce((acc, b) => acc + ((BUILDING_STATS[b.type]?.storage || 0) * b.level), 0);
             const maxStorage = baseStorage + additionalStorage;
             
             const currentAmount = state.resources[type];
@@ -189,11 +189,11 @@ export const useGameStore = create<GameState>()(
 
       removeNature: (id: string) => {
         const state = get();
-        const item = state.nature.find(n => n.id === id);
+        const item = (state.nature || []).find(n => n.id === id);
         if (item) {
             state.addLog(`Cleared ${item.type}`, 'info');
             set((state) => ({
-                nature: state.nature.filter((item) => item.id !== id)
+                nature: (state.nature || []).filter((item) => item.id !== id)
             }));
         }
       },
@@ -206,26 +206,25 @@ export const useGameStore = create<GameState>()(
             return;
         }
         
-        const barn = state.buildings.find(b => b.type === 'barn');
+        const barn = (state.buildings || []).find(b => b.type === 'barn');
         if (!barn) {
           // Safety: auto-insert barn if missing
-          set((s) => ({ buildings: [initialBarn, ...s.buildings] }));
-          return;
+          set((s) => ({ buildings: [initialBarn, ...(s.buildings || [])] }));
         }
-
+        
         const requiredLevel = BARN_LEVEL_REQUIREMENTS[type];
-        if (requiredLevel && barn.level < requiredLevel) {
+        if (requiredLevel && (!barn || barn.level < requiredLevel)) {
           state.addLog(`Upgrade the Barn to level ${requiredLevel} to unlock ${type}.`, 'warning');
           return;
         }
         const researchReq = BUILDING_RESEARCH_REQ[type];
-        if (researchReq && !state.unlockedResearch.includes(researchReq)) {
+        if (researchReq && !(state.unlockedResearch || []).includes(researchReq)) {
           state.addLog(`Research "${researchReq}" to unlock ${type}.`, 'warning');
           return;
         }
         
         // Validate collision again (server-side validation style)
-        const buildingCollision = state.buildings.some(b => 
+        const buildingCollision = (state.buildings || []).some(b => 
             b.position[0] === position[0] && b.position[2] === position[2]
         );
         
@@ -234,7 +233,7 @@ export const useGameStore = create<GameState>()(
         const minZ = position[2] - 0.8;
         const maxZ = position[2] + 0.8;
 
-        const natureCollision = state.nature.some(n => 
+        const natureCollision = (state.nature || []).some(n => 
             n.position[0] > minX && n.position[0] < maxX &&
             n.position[2] > minZ && n.position[2] < maxZ
         );
@@ -263,8 +262,8 @@ export const useGameStore = create<GameState>()(
         // Check if has enough workers (if workers required)
         if (stats.workers) {
             // Calculate current employed
-            const employed = state.buildings.reduce((acc, b) => acc + (BUILDING_STATS[b.type].workers || 0), 0);
-            if (state.settlers.length - employed < stats.workers) {
+            const employed = (state.buildings || []).reduce((acc, b) => acc + (BUILDING_STATS[b.type]?.workers || 0), 0);
+            if ((state.settlers || []).length - employed < stats.workers) {
                 canAfford = false;
                 state.addLog('Not enough workers!', 'warning');
                 return;
@@ -299,7 +298,7 @@ export const useGameStore = create<GameState>()(
       
       upgradeBuilding: (id: string) => {
         const state = get();
-        const building = state.buildings.find(b => b.id === id);
+        const building = (state.buildings || []).find(b => b.id === id);
         if (!building) return;
         
         const baseCost = BUILDING_COSTS[building.type];
@@ -321,7 +320,7 @@ export const useGameStore = create<GameState>()(
              });
              
              set((state) => ({
-                 buildings: state.buildings.map(b => 
+                 buildings: (state.buildings || []).map(b => 
                      b.id === id ? { ...b, level: b.level + 1 } : b
                  )
              }));
@@ -333,7 +332,7 @@ export const useGameStore = create<GameState>()(
 
       demolishBuilding: (id: string) => {
         const state = get();
-        const building = state.buildings.find(b => b.id === id);
+        const building = (state.buildings || []).find(b => b.id === id);
         if (building?.type === 'barn') {
           state.addLog('The Barn is the heart of the homestead and cannot be demolished.', 'warning');
           return;
@@ -342,13 +341,13 @@ export const useGameStore = create<GameState>()(
           state.addLog(`Demolished ${building.type}`, 'danger');
             
             // Unassign workers
-            const newSettlers = state.settlers.map(s => 
+            const newSettlers = (state.settlers || []).map(s => 
                 s.job === id ? { ...s, job: undefined, state: 'idle' as const } : 
                 s.home === id ? { ...s, home: undefined } : s
             );
 
             set((state) => ({
-                buildings: state.buildings.filter(b => b.id !== id),
+                buildings: (state.buildings || []).filter(b => b.id !== id),
                 settlers: newSettlers,
                 selectedBuildingId: null
             }));
@@ -357,7 +356,7 @@ export const useGameStore = create<GameState>()(
 
       assignWorker: (buildingId: string) => {
           const state = get();
-          const building = state.buildings.find(b => b.id === buildingId);
+          const building = (state.buildings || []).find(b => b.id === buildingId);
           if (!building) return;
 
           const stats = BUILDING_STATS[building.type];
@@ -366,17 +365,17 @@ export const useGameStore = create<GameState>()(
               return;
           }
 
-          const currentWorkers = state.settlers.filter(s => s.job === buildingId).length;
+          const currentWorkers = (state.settlers || []).filter(s => s.job === buildingId).length;
           if (currentWorkers >= (stats.workers || 0)) {
               state.addLog(`${building.type} is fully staffed.`, 'warning');
               return;
           }
 
           // Find unemployed settler
-          const unemployed = state.settlers.find(s => !s.job);
+          const unemployed = (state.settlers || []).find(s => !s.job);
           if (unemployed) {
               set((state) => ({
-                  settlers: state.settlers.map(s => 
+                  settlers: (state.settlers || []).map(s => 
                       s.id === unemployed.id ? { ...s, job: buildingId, state: 'walking', targetPosition: building.position } : s
                   )
               }));
@@ -389,10 +388,10 @@ export const useGameStore = create<GameState>()(
       unassignWorker: (buildingId: string) => {
           const state = get();
           // Find a worker at this building
-          const worker = state.settlers.find(s => s.job === buildingId);
+          const worker = (state.settlers || []).find(s => s.job === buildingId);
           if (worker) {
               set((state) => ({
-                  settlers: state.settlers.map(s => 
+                  settlers: (state.settlers || []).map(s => 
                       s.id === worker.id ? { ...s, job: undefined, state: 'idle' } : s
                   )
               }));
@@ -446,12 +445,12 @@ export const useGameStore = create<GameState>()(
         set((state) => ({
             resources: {
                 ...state.resources,
-                food: state.resources.food - costFood,
-                wood: state.resources.wood - costWood,
+                food: (state.resources?.food || 0) - costFood,
+                wood: (state.resources?.wood || 0) - costWood,
             },
         }));
 
-        const watchtowers = state.buildings.filter(b => b.type === 'watchtower').length;
+        const watchtowers = (state.buildings || []).filter(b => b.type === 'watchtower').length;
         const luck = Math.random() + watchtowers * 0.05;
 
         if (luck > 0.65) {
@@ -462,15 +461,15 @@ export const useGameStore = create<GameState>()(
             set((state) => ({
                 resources: {
                     ...state.resources,
-                    wood: state.resources.wood + woodGain,
-                    food: state.resources.food + foodGain,
-                    stone: state.resources.stone + stoneGain,
+                    wood: (state.resources?.wood || 0) + woodGain,
+                    food: (state.resources?.food || 0) + foodGain,
+                    stone: (state.resources?.stone || 0) + stoneGain,
                 },
                 settlers: Math.random() > 0.6 ? [
-                    ...state.settlers,
+                    ...(state.settlers || []),
                     {
                         id: generateId(),
-                        name: `Scout ${state.settlers.length + 1}`,
+                        name: `Scout ${(state.settlers || []).length + 1}`,
                         position: [0, 0, 0] as [number, number, number],
                         targetPosition: null,
                         state: 'idle' as const,
@@ -479,7 +478,7 @@ export const useGameStore = create<GameState>()(
                         energy: 100,
                         traits: getRandomTraits(),
                     }
-                ] : state.settlers,
+                ] : (state.settlers || []),
             }));
             state.addLog(`Expedition returned with riches! +${woodGain} wood, +${foodGain} food${stoneGain ? `, +${stoneGain} stone` : ''}`, 'success');
         } else if (luck > 0.35) {
@@ -487,19 +486,19 @@ export const useGameStore = create<GameState>()(
             set((state) => ({
                 resources: {
                     ...state.resources,
-                    iron: state.resources.iron + ironGain,
+                    iron: (state.resources?.iron || 0) + ironGain,
                 }
             }));
             state.addLog(`Expedition found rare iron veins! +${ironGain} iron`, 'info');
         } else {
             // Failure
-            const penalty = Math.max(5, Math.round(state.resources.wood * 0.05));
+            const penalty = Math.max(5, Math.round((state.resources?.wood || 0) * 0.05));
             set((state) => ({
                 resources: {
                     ...state.resources,
-                    wood: Math.max(0, state.resources.wood - penalty),
+                    wood: Math.max(0, (state.resources?.wood || 0) - penalty),
                 },
-                happiness: Math.max(0, state.happiness - 5),
+                happiness: Math.max(0, (state.happiness || 0) - 5),
             }));
             state.addLog('Expedition ran into trouble and limped home. Lost some supplies.', 'danger');
         }
@@ -507,18 +506,17 @@ export const useGameStore = create<GameState>()(
 
       claimObjective: (id: string) => {
         const state = get();
-        const objective = state.objectives.find(o => o.id === id);
+        const objective = (state.objectives || []).find(o => o.id === id);
         if (!objective || !objective.complete || objective.claimed) return;
 
         set((state) => ({
             resources: {
-                ...state.resources,
                 wood: state.resources.wood + (objective.reward.wood || 0),
                 food: state.resources.food + (objective.reward.food || 0),
                 stone: state.resources.stone + (objective.reward.stone || 0),
                 iron: state.resources.iron + (objective.reward.iron || 0),
             },
-            objectives: state.objectives.map(o => o.id === id ? { ...o, claimed: true } : o),
+            objectives: (state.objectives || []).map(o => o.id === id ? { ...o, claimed: true } : o),
         }));
 
         state.addLog(`Claimed reward: ${objective.title}`, 'success');
@@ -526,7 +524,7 @@ export const useGameStore = create<GameState>()(
 
       startResearch: (id: ResearchId) => {
         const state = get();
-        if (state.unlockedResearch.includes(id)) {
+        if ((state.unlockedResearch || []).includes(id)) {
           state.addLog('Research already unlocked.', 'warning');
           return;
         }
@@ -536,14 +534,14 @@ export const useGameStore = create<GameState>()(
         }
         const topic = RESEARCH_TREE.find((r) => r.id === id);
         if (!topic) return;
-        const barn = state.buildings.find((b) => b.type === 'barn');
+        const barn = (state.buildings || []).find((b) => b.type === 'barn');
         if (!barn || barn.level < topic.barnLevelReq) {
-          state.addLog(`Requires Barn level ${topic.barnLevelReq} to research ${topic.name}.`, 'warning');
+          state.addLog(`Barn level ${topic.barnLevelReq} required.`, 'warning');
           return;
         }
         // Check costs
         const canAfford = (Object.keys(topic.cost) as ResourceType[]).every(
-          (res) => (state.resources[res] || 0) >= (topic.cost[res] || 0)
+          (r) => state.resources[r] >= (topic.cost[r] || 0)
         );
         if (!canAfford) {
           state.addLog('Not enough resources for research.', 'warning');
@@ -573,7 +571,7 @@ export const useGameStore = create<GameState>()(
 
       acceptTrade: (offerId: string) => {
           const state = get();
-          const offer = state.tradeOffers.find(o => o.id === offerId);
+          const offer = (state.tradeOffers || []).find(o => o.id === offerId);
           if (!offer) return;
           
           // Check costs
@@ -598,7 +596,7 @@ export const useGameStore = create<GameState>()(
                       return acc;
                   }, {} as Resources),
               },
-              tradeOffers: s.tradeOffers.filter(o => o.id !== offerId)
+              tradeOffers: (s.tradeOffers || []).filter(o => o.id !== offerId)
           }));
           state.addLog('Trade completed!', 'success');
       },
@@ -614,13 +612,20 @@ export const useGameStore = create<GameState>()(
 
       loadSaveData: (data: Partial<GameSaveData>) => {
         const current = get();
-        const incomingBuildings = data.buildings || current.buildings;
-        const ensureBarnBuildings = incomingBuildings.some(b => b.type === 'barn')
+        const incomingBuildings = data.buildings || current.buildings || [];
+        const ensureBarnBuildings = (incomingBuildings || []).some(b => b.type === 'barn')
           ? incomingBuildings
           : [initialBarn, ...incomingBuildings];
+        
+        // Ensure settlers have traits
+        const incomingSettlers = (data.settlers || current.settlers).map(s => ({
+          ...s,
+          traits: s.traits || []
+        }));
+
         set({
           resources: data.resources || current.resources,
-          settlers: data.settlers || current.settlers,
+          settlers: incomingSettlers,
           happiness: data.happiness ?? current.happiness,
           buildings: ensureBarnBuildings,
           nature: data.nature || current.nature,
@@ -651,15 +656,16 @@ export const useGameStore = create<GameState>()(
           let newSettlers = [...state.settlers];
 
           const baseStorage = 100;
-          const additionalStorage = state.buildings.reduce(
-            (acc, b) => acc + ((BUILDING_STATS[b.type].storage || 0) * b.level),
+          const additionalStorage = (state.buildings || []).reduce(
+            (acc, b) => acc + ((BUILDING_STATS[b.type]?.storage || 0) * b.level),
             0
           );
           const maxStorage = baseStorage + additionalStorage;
 
           // Resource generation
-          state.buildings.forEach((b) => {
+          (state.buildings || []).forEach((b) => {
             const gen = RESOURCE_GENERATION[b.type];
+            if (!gen) return;
             (Object.keys(gen) as ResourceType[]).forEach((res) => {
               const amount = (gen[res] || 0) * b.level * 0.1;
               newResources[res] = Math.min(maxStorage, newResources[res] + amount);
@@ -667,7 +673,7 @@ export const useGameStore = create<GameState>()(
           });
 
           // Food consumption
-          const foodCost = state.settlers.length * 0.04;
+          const foodCost = (state.settlers || []).length * 0.04;
           newResources.food = Math.max(0, newResources.food - foodCost);
           if (newResources.food <= 0.1) {
             newHappiness = Math.max(0, newHappiness - 0.5);
@@ -685,10 +691,10 @@ export const useGameStore = create<GameState>()(
           newSeason = seasonRoll < 1 ? 'spring' : seasonRoll < 2 ? 'summer' : seasonRoll < 3 ? 'autumn' : 'winter';
 
           // Trading Post logic
-          let newTradeOffers = state.tradeOffers;
-          let newLastTradeRefresh = state.lastTradeRefresh;
+          let newTradeOffers = state.tradeOffers || [];
+          let newLastTradeRefresh = state.lastTradeRefresh || 0;
           
-          const hasTradingPost = state.buildings.some(b => b.type === 'tradingPost');
+          const hasTradingPost = (state.buildings || []).some(b => b.type === 'tradingPost');
           if (hasTradingPost && newDay - state.lastTradeRefresh > 3) { // Refresh every 3 days
               newTradeOffers = generateTradeOffers(newDay);
               newLastTradeRefresh = newDay;
@@ -697,13 +703,13 @@ export const useGameStore = create<GameState>()(
           }
 
           // Settler AI (movement/work)
-          newSettlers = newSettlers.map((settler) => {
+          newSettlers = (state.settlers || []).map((settler) => {
             const timeOfDay = newDay % 1;
             const isNight = timeOfDay > 0.75 || timeOfDay < 0.2;
             const isWorkTime = timeOfDay > 0.25 && timeOfDay < 0.7;
 
             if (settler.job && isWorkTime) {
-              const workplace = state.buildings.find((b) => b.id === settler.job);
+              const workplace = (state.buildings || []).find((b) => b.id === settler.job);
               if (workplace) {
                 const dist = Math.hypot(settler.position[0] - workplace.position[0], settler.position[2] - workplace.position[2]);
                 if (dist > 2) {
@@ -742,7 +748,7 @@ export const useGameStore = create<GameState>()(
               const dz = settler.targetPosition[2] - settler.position[2];
               const dist = Math.hypot(dx, dz);
               let speed = 0.08;
-              if (settler.traits.some(t => t.type === 'fast')) speed *= 1.5;
+              if (settler.traits?.some(t => t.type === 'fast')) speed *= 1.5;
 
               if (dist < speed) {
                 return { ...settler, position: settler.targetPosition, targetPosition: null, state: 'idle' };
@@ -758,19 +764,19 @@ export const useGameStore = create<GameState>()(
             }
             // Needs adjustments
             let hungerDrop = 0.1;
-            if (settler.traits.some(t => t.type === 'glutton')) hungerDrop *= 1.5;
-            if (settler.traits.some(t => t.type === 'ascetic')) hungerDrop *= 0.7;
+            if (settler.traits?.some(t => t.type === 'glutton')) hungerDrop *= 1.5;
+            if (settler.traits?.some(t => t.type === 'ascetic')) hungerDrop *= 0.7;
 
             let hunger = Math.max(0, Math.min(100, settler.hunger - hungerDrop)); // gradual hunger drop
             let energy = settler.energy;
 
             if (settler.state === 'working' || settler.state === 'walking') {
               let energyDrop = 0.2;
-              if (settler.traits.some(t => t.type === 'strong')) energyDrop *= 0.6;
+              if (settler.traits?.some(t => t.type === 'strong')) energyDrop *= 0.6;
               energy = Math.max(0, energy - energyDrop);
             } else if (settler.state === 'resting') {
               let energyGain = 0.6;
-              if (settler.traits.some(t => t.type === 'insomniac')) energyGain *= 1.5;
+              if (settler.traits?.some(t => t.type === 'insomniac')) energyGain *= 1.5;
               energy = Math.min(100, energy + energyGain);
               hunger = Math.max(0, hunger - 0.05);
             } else {
@@ -784,7 +790,7 @@ export const useGameStore = create<GameState>()(
             
             // Workaholic trait: gain happiness when working? or just don't lose it?
             // Let's say workaholics gain a tiny bit of happiness when working
-            if (settler.state === 'working' && settler.traits.some(t => t.type === 'workaholic')) {
+            if (settler.state === 'working' && settler.traits?.some(t => t.type === 'workaholic')) {
                  newHappiness = Math.min(100, newHappiness + 0.01);
             }
 
@@ -845,17 +851,17 @@ export const useGameStore = create<GameState>()(
             }
           }
 
-          const updatedObjectives = state.objectives.map((o) => {
+          const updatedObjectives = (state.objectives || []).map((o) => {
             if (o.complete) return o;
             let met = false;
             if (o.goal.type === 'resource' && o.goal.key) {
-              met = newResources[o.goal.key as ResourceType] >= o.goal.amount;
+              met = (newResources[o.goal.key as ResourceType] || 0) >= o.goal.amount;
             } else if (o.goal.type === 'building' && o.goal.key) {
-              met = state.buildings.filter((b) => b.type === o.goal.key).length >= o.goal.amount;
+              met = (state.buildings || []).filter((b) => b.type === o.goal.key).length >= o.goal.amount;
             } else if (o.goal.type === 'population') {
-              met = newSettlers.length >= o.goal.amount;
+              met = (newSettlers || []).length >= o.goal.amount;
             } else if (o.goal.type === 'happiness') {
-              met = newHappiness >= o.goal.amount;
+              met = (newHappiness || 0) >= o.goal.amount;
             }
             return met ? { ...o, complete: true } : o;
           });
@@ -934,8 +940,14 @@ export const useGameStore = create<GameState>()(
       migrate: (persistedState, _version) => {
         const state = persistedState as GameState;
         if (!state.buildings) state.buildings = [];
-        if (!state.buildings.some((b) => b.type === 'barn')) {
+        if (!(state.buildings || []).some((b) => b.type === 'barn')) {
           state.buildings = [initialBarn, ...state.buildings];
+        }
+        if (state.settlers) {
+          state.settlers = state.settlers.map(s => ({
+            ...s,
+            traits: s.traits || []
+          }));
         }
         return state;
       },

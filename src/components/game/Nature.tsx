@@ -153,7 +153,7 @@ export const EnvironmentProps: React.FC = () => {
 
     return (
         <group>
-            {natureItems.map((item) => (
+            {(natureItems || []).map((item) => (
                 item.type === 'tree' ? 
                 <Tree key={item.id} id={item.id} position={item.position} scale={item.scale} /> :
                 <Rock key={item.id} id={item.id} position={item.position} scale={item.scale} />

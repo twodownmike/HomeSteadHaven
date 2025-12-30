@@ -24,7 +24,7 @@ export const Scene: React.FC = () => {
 
   const checkCollision = (pos: [number, number, number]) => {
     // Check collision with existing buildings
-    const buildingCollision = buildings.some(b => 
+    const buildingCollision = (buildings || []).some(b => 
         b.position[0] === pos[0] && b.position[2] === pos[2]
     );
     if (buildingCollision) return true;
@@ -36,7 +36,7 @@ export const Scene: React.FC = () => {
     const minZ = pos[2] - 0.8;
     const maxZ = pos[2] + 0.8;
 
-    const natureCollision = nature.some(n => 
+    const natureCollision = (nature || []).some(n => 
         n.position[0] > minX && n.position[0] < maxX &&
         n.position[2] > minZ && n.position[2] < maxZ
     );
@@ -105,7 +105,7 @@ export const Scene: React.FC = () => {
       <gridHelper args={[100, 50, 0xffffff, 0xffffff]} position={[0, 0.01, 0]} material-opacity={0.2} material-transparent />
 
       {/* Render Existing Buildings */}
-      {buildings.map((building) => (
+      {(buildings || []).map((building) => (
         <group key={building.id} position={building.position}>
           <BuildingModel 
             type={building.type} 
@@ -117,7 +117,7 @@ export const Scene: React.FC = () => {
       ))}
 
       {/* Render Settlers */}
-      {settlers.map((settler) => (
+      {(settlers || []).map((settler) => (
         <Settler key={settler.id} settler={settler} />
       ))}
 
