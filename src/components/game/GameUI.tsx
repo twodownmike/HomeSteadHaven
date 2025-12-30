@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, Settings, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
@@ -48,7 +48,7 @@ export const GameUI: React.FC = () => {
     startResearch,
     cancelResearch,
   } = useGameStore();
-  const [showSettings, setShowSettings] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [showBuildMenu, setShowBuildMenu] = useState(false);
   const [showObjectives, setShowObjectives] = useState(false);
   const [showResearch, setShowResearch] = useState(false);
@@ -67,7 +67,7 @@ export const GameUI: React.FC = () => {
   const handleReset = () => {
     if (confirm('Are you sure you want to reset your progress? This cannot be undone.')) {
         reset();
-        setShowSettings(false);
+        setShowMenu(false);
     }
   };
 
@@ -206,148 +206,127 @@ export const GameUI: React.FC = () => {
   }, []);
 
   return (
-    <div className="absolute inset-0 pointer-events-none px-3 sm:px-4 py-3 flex flex-col gap-4">
-      {/* Top HUD (mobile-friendly wrap) */}
-      <div className="pointer-events-auto flex flex-col gap-3">
-        <div className="flex flex-wrap gap-2 sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[110px]">
-              <div className="text-sm font-bold">Day {day.toFixed(1)}</div>
-            </div>
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[110px]">
-              <div className="text-sm font-bold capitalize">{season}</div>
-              <div className="text-xs text-gray-300 flex items-center gap-1">
-                {weather === 'rain' && <CloudRain className="w-4 h-4 text-blue-300" />}
-                {weather === 'snow' && <Snowflake className="w-4 h-4 text-cyan-100" />}
-                {weather === 'sunny' && <Sun className="w-4 h-4 text-amber-300" />}
-                {weather}
-              </div>
-            </div>
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[140px]">
-              <div className="text-sm font-bold flex items-center gap-2">
-                <Smile className="w-4 h-4 text-green-300" /> Happiness
-              </div>
-              <div className="text-sm">{Math.floor(happiness)}%</div>
-              <div className="w-full h-2 bg-white/10 rounded-full mt-1 overflow-hidden">
-                <div className="h-full bg-green-400" style={{ width: `${happiness}%` }} />
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(['wood','food','stone','iron'] as ResourceType[]).map((res) => (
-              <div key={res} className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-2 min-w-[84px] justify-between">
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between z-30">
+      {/* Top Bar: Menu + Resources */}
+      <div className="pointer-events-auto flex flex-col gap-2 p-3 w-full max-w-full">
+        <div className="flex items-center gap-2 w-full">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl hover:bg-white/10 transition-colors shrink-0"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <div className="flex-1 overflow-x-auto no-scrollbar flex gap-2 mask-linear-fade">
+            {(['wood', 'food', 'stone', 'iron'] as ResourceType[]).map((res) => (
+              <div key={res} className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-2 min-w-fit">
                 <ResourceIcon type={res} />
-                <div className="text-sm font-bold">{resources[res]}</div>
+                <div className="text-sm font-bold">{Math.floor(resources[res])}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-          <div className="flex gap-2">
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[140px]">
-              <div className="text-sm font-bold">Population</div>
-              <div className="text-sm">{settlers.length} settlers</div>
-              <div className="text-xs text-gray-300">{buildings.length} buildings</div>
+        {/* Status Bar: Compact stats */}
+        <div className="flex flex-wrap gap-2">
+          <div className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-3 text-xs sm:text-sm">
+            <div className="font-bold">Day {day.toFixed(0)}</div>
+            <div className="w-px h-3 bg-white/20" />
+            <div className="flex items-center gap-1 capitalize">
+              {weather === 'rain' && <CloudRain className="w-3 h-3 text-blue-300" />}
+              {weather === 'snow' && <Snowflake className="w-3 h-3 text-cyan-100" />}
+              {weather === 'sunny' && <Sun className="w-3 h-3 text-amber-300" />}
+              <span className="hidden sm:inline">{weather}</span>
+            </div>
+            <div className="w-px h-3 bg-white/20" />
+            <div className="flex items-center gap-1">
+              <Smile className={`w-3 h-3 ${happiness > 70 ? 'text-green-300' : 'text-yellow-300'}`} />
+              <span>{Math.floor(happiness)}%</span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 justify-end">
-            <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl min-w-[140px]">
-              <div className="text-xs uppercase opacity-70 font-bold tracking-wider">Needs</div>
-              <div className="text-sm">Hunger {avgHunger}% · Energy {avgEnergy}%</div>
-              {lowNeeds > 0 && <div className="text-xs text-yellow-200 mt-1">{lowNeeds} settlers need care</div>}
+
+          <div className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-3 text-xs sm:text-sm">
+            <div className="flex items-center gap-1">
+              <Users className="w-3 h-3 text-gray-300" />
+              <span>{settlers.length}</span>
             </div>
-            <button
-              onClick={celebrateFestival}
-              disabled={!canFestival}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${canFestival ? 'bg-pink-600/30 border-pink-400 text-pink-100 hover:bg-pink-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
-            >
-              <PartyPopper className="w-4 h-4" />
-              Festival
-            </button>
-            <button
-              onClick={sendExpedition}
-              disabled={!canExpedition}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${canExpedition ? 'bg-indigo-600/30 border-indigo-400 text-indigo-100 hover:bg-indigo-600/50' : 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'}`}
-            >
-              <Compass className="w-4 h-4" />
-              Expedition
-            </button>
-            <button 
-              onClick={() => setShowObjectives((v) => !v)}
-              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors ${showObjectives ? 'bg-emerald-600/30 border-emerald-400 text-emerald-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
-            >
-              Objectives
-            </button>
-            <button 
-              onClick={() => setShowResearch((v) => !v)}
-              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 ${showResearch ? 'bg-cyan-600/30 border-cyan-400 text-cyan-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
-            >
-              <Brain className="w-4 h-4" />
-              Research
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving || isLoadingSave}
-              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 ${isSaving ? 'bg-yellow-600/30 border-yellow-400 text-yellow-100' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-            {user ? (
-              <button
-                onClick={handleLogout}
-                className="px-3 py-2 rounded-xl border border-white/10 text-xs sm:text-sm font-semibold flex items-center gap-2 bg-white/10 hover:bg-white/20"
-              >
-                <LogOut className="w-4 h-4" />
-                {user.displayName || 'Logout'}
-              </button>
-            ) : (
-              <button
-                onClick={handleLogin}
-                className="px-3 py-2 rounded-xl border border-white/10 text-xs sm:text-sm font-semibold flex items-center gap-2 bg-white/5 hover:bg-white/10"
-              >
-                <LogIn className="w-4 h-4" />
-                Sign in
-              </button>
-            )}
-            <button 
-              onClick={() => setShowSettings(!showSettings)}
-              className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 text-white shadow-xl hover:bg-white/10 transition-colors"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            <div className="w-px h-3 bg-white/20" />
+            <div className={`flex items-center gap-1 ${lowNeeds > 0 ? 'text-yellow-300' : 'text-gray-300'}`}>
+              <HeartPulse className="w-3 h-3" />
+              <span>{Math.round((avgHunger + avgEnergy) / 2)}%</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Settings Menu */}
-      {showSettings && (
-        <div className="absolute top-20 right-3 sm:right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 text-white shadow-xl pointer-events-auto z-50 flex flex-col gap-2 min-w-[200px]">
-          <h3 className="font-bold text-lg mb-2">Settings</h3>
+      {/* Main Menu Drawer */}
+      {showMenu && (
+        <div className="absolute top-16 left-3 w-64 bg-black/90 backdrop-blur-xl p-4 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-50 flex flex-col gap-4 animate-in slide-in-from-left-4 fade-in duration-200">
+          {/* Actions Section */}
           <div className="flex flex-col gap-2">
-            <span className="text-xs uppercase opacity-60 font-bold tracking-wider">Game Speed</span>
+            <div className="text-xs uppercase opacity-60 font-bold tracking-wider mb-1">Actions</div>
+            
+            <button onClick={() => { setShowObjectives((v) => !v); setShowMenu(false); }} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">
+              <Trophy className="w-4 h-4 text-emerald-300" /> Objectives
+            </button>
+            
+            <button onClick={() => { setShowResearch((v) => !v); setShowMenu(false); }} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">
+              <Brain className="w-4 h-4 text-cyan-300" /> Research
+            </button>
+
+            <button onClick={celebrateFestival} disabled={!canFestival} className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 transition-colors ${canFestival ? 'bg-pink-600/20 hover:bg-pink-600/30 text-pink-100' : 'bg-white/5 opacity-50 cursor-not-allowed'}`}>
+              <PartyPopper className="w-4 h-4 text-pink-300" /> Festival
+            </button>
+
+            <button onClick={sendExpedition} disabled={!canExpedition} className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 transition-colors ${canExpedition ? 'bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-100' : 'bg-white/5 opacity-50 cursor-not-allowed'}`}>
+              <Compass className="w-4 h-4 text-indigo-300" /> Expedition
+            </button>
+          </div>
+
+          <div className="h-px bg-white/10" />
+
+          {/* System Section */}
+          <div className="flex flex-col gap-2">
+            <div className="text-xs uppercase opacity-60 font-bold tracking-wider mb-1">System</div>
+            
+            {user ? (
+              <div className="flex flex-col gap-2">
+                <div className="px-3 text-xs text-gray-400">Signed in as {user.displayName}</div>
+                <button onClick={handleSave} disabled={isSaving || isLoadingSave} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">
+                  <Save className="w-4 h-4 text-yellow-300" /> {isSaving ? 'Saving...' : 'Save Game'}
+                </button>
+                <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">
+                  <LogOut className="w-4 h-4 text-red-300" /> Logout
+                </button>
+              </div>
+            ) : (
+              <button onClick={handleLogin} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-100 transition-colors">
+                <LogIn className="w-4 h-4" /> Sign In with Google
+              </button>
+            )}
+
+            <span className="text-xs uppercase opacity-60 font-bold tracking-wider mt-2">Game Speed</span>
             <div className="grid grid-cols-3 gap-2">
               {[1200, 800, 500].map((rate) => (
                 <button
                   key={rate}
                   onClick={() => setTickRate(rate)}
-                  className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${tickRate === rate ? 'bg-green-600/30 border-green-400 text-green-100' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${tickRate === rate ? 'bg-green-600/30 border-green-400 text-green-100' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                 >
                   {Math.round(1000 / rate)}x
                 </button>
               ))}
             </div>
-            <div className="text-[11px] text-gray-400">Higher speeds update the world more frequently.</div>
           </div>
+          
           <button 
             onClick={handleReset}
-            className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 px-4 py-2 rounded-lg transition-colors w-full text-left"
+            className="flex items-center gap-3 bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-2 rounded-xl transition-colors w-full text-left border border-red-500/20"
           >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-4 h-4 text-red-300" />
               Reset Progress
           </button>
-          <div className="text-xs text-gray-400 mt-2">
+          <div className="text-[10px] text-gray-500 text-center">
               v0.2.0 Beta
           </div>
         </div>
@@ -355,13 +334,18 @@ export const GameUI: React.FC = () => {
 
       {/* Research Panel */}
       {showResearch && (
-        <div className="pointer-events-auto w-full max-w-4xl bg-black/85 backdrop-blur-md p-4 rounded-2xl border border-cyan-400/30 text-white shadow-2xl mx-auto mt-2 sm:mt-4">
-          <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-cyan-300" />
-            <h3 className="text-lg font-bold">Research</h3>
-            {currentResearch && <span className="text-xs text-cyan-200">In progress…</span>}
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/85 backdrop-blur-md p-4 rounded-2xl border border-cyan-400/30 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-cyan-300" />
+              <h3 className="text-lg font-bold">Research</h3>
+              {currentResearch && <span className="text-xs text-cyan-200">In progress…</span>}
+            </div>
+            <button onClick={() => setShowResearch(false)} className="text-gray-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {RESEARCH_TREE.map((topic) => {
               const unlocked = unlockedResearch.includes(topic.id);
               const inProgress = currentResearch === topic.id;
@@ -522,11 +506,16 @@ export const GameUI: React.FC = () => {
 
       {/* Objectives Panel (top) */}
       {showObjectives && (
-        <div className="pointer-events-auto w-full max-w-4xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-2 sm:mt-4">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-300" />
-            <h3 className="text-lg font-bold">Objectives</h3>
-            {isLoadingSave && <span className="text-xs text-gray-300">Loading save...</span>}
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-300" />
+              <h3 className="text-lg font-bold">Objectives</h3>
+              {isLoadingSave && <span className="text-xs text-gray-300">Loading save...</span>}
+            </div>
+            <button onClick={() => setShowObjectives(false)} className="text-gray-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
             {objectives.map((obj) => {
@@ -582,7 +571,7 @@ export const GameUI: React.FC = () => {
         </div>
 
         {showBuildMenu && (
-          <div className="pointer-events-auto mx-auto w-full max-w-5xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl mt-12">
+          <div className="pointer-events-auto mx-auto w-full max-w-5xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl mt-12 mb-16">
             {isBuilding && selectedBuilding && (
               <div className="mb-3 bg-yellow-500/15 border border-yellow-400/40 text-yellow-100 px-4 py-2 rounded-lg text-sm font-semibold">
                 Placing {selectedBuilding}... tap ground to confirm.
