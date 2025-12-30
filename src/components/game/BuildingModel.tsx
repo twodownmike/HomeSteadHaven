@@ -289,6 +289,36 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, level = 1, s
         </group>
       )}
 
+      {/* Trading Post */}
+      {type === 'tradingPost' && (
+        <group>
+          {/* Main Stall */}
+          <mesh position={[0, 1, 0]} castShadow>
+             <boxGeometry args={[2.5, 1.5, 1.5]} />
+             <meshStandardMaterial color="#78350f" transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Counter */}
+          <mesh position={[0, 0.8, 1]} castShadow>
+             <boxGeometry args={[2.5, 0.8, 0.5]} />
+             <meshStandardMaterial color="#b45309" transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Canopy stripes */}
+          <mesh position={[0, 2.2, 0.5]} rotation={[Math.PI / 6, 0, 0]} castShadow>
+             <boxGeometry args={[2.8, 0.2, 2.5]} />
+             <meshStandardMaterial color="#ef4444" transparent={transparent} opacity={opacity} />
+          </mesh>
+          {/* Crates */}
+          <mesh position={[-0.8, 0.4, 1.4]} castShadow>
+             <boxGeometry args={[0.5, 0.5, 0.5]} />
+             <meshStandardMaterial color="#d97706" transparent={transparent} opacity={opacity} />
+          </mesh>
+          <mesh position={[0.8, 0.4, 1.4]} castShadow>
+             <boxGeometry args={[0.5, 0.5, 0.5]} />
+             <meshStandardMaterial color="#fcd34d" transparent={transparent} opacity={opacity} />
+          </mesh>
+        </group>
+      )}
+
       {/* Selection Ring */}
       {selected && !ghost && (
         <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>

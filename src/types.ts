@@ -7,7 +7,7 @@ export interface Resources {
   iron: number;
 }
 
-export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery' | 'workshop' | 'infirmary';
+export type BuildingType = 'barn' | 'cabin' | 'farm' | 'mine' | 'lumberMill' | 'warehouse' | 'bakery' | 'well' | 'campfire' | 'watchtower' | 'fishery' | 'workshop' | 'infirmary' | 'tradingPost';
 
 export interface Building {
   id: string;
@@ -34,7 +34,25 @@ export interface Settler {
   actionTimer: number; // Time until next state change or action completion
   hunger: number; // 0-100, lower is hungrier
   energy: number; // 0-100, lower is tired
+  traits: Trait[];
 }
+
+export type TraitType = 'strong' | 'fast' | 'glutton' | 'ascetic' | 'insomniac' | 'workaholic';
+
+export interface Trait {
+  type: TraitType;
+  name: string;
+  description: string;
+}
+
+export const TRAIT_DEFINITIONS: Record<TraitType, Trait> = {
+  strong: { type: 'strong', name: 'Strong', description: 'Consumes energy slower while working.' },
+  fast: { type: 'fast', name: 'Fast', description: 'Moves significantly faster.' },
+  glutton: { type: 'glutton', name: 'Glutton', description: 'Gets hungry faster.' },
+  ascetic: { type: 'ascetic', name: 'Ascetic', description: 'Needs less food.' },
+  insomniac: { type: 'insomniac', name: 'Insomniac', description: 'Regains energy faster while resting.' },
+  workaholic: { type: 'workaholic', name: 'Workaholic', description: 'Loses happiness slower when working.' },
+};
 
 export interface NatureItem {
   id: string;
@@ -94,6 +112,13 @@ export interface GameSaveData {
   researchProgress: number;
 }
 
+export interface TradeOffer {
+  id: string;
+  gives: Partial<Resources>;
+  wants: Partial<Resources>;
+  expiresAt: number;
+}
+
 export interface GameState {
   resources: Resources;
   settlers: Settler[];
@@ -112,6 +137,8 @@ export interface GameState {
   unlockedResearch: ResearchId[];
   currentResearch: ResearchId | null;
   researchProgress: number; // 0..1 for current research
+  tradeOffers: TradeOffer[];
+  lastTradeRefresh: number; // Day number
   
   // Actions
   addResource: (type: ResourceType, amount: number) => void;
@@ -131,6 +158,8 @@ export interface GameState {
   sendExpedition: () => void;
   startResearch: (id: ResearchId) => void;
   cancelResearch: () => void;
+  acceptTrade: (offerId: string) => void;
+  refreshTrades: () => void;
   loadSaveData: (data: Partial<GameSaveData>) => void;
   tick: () => void;
   reset: () => void;
@@ -150,6 +179,7 @@ export const BUILDING_COSTS: Record<BuildingType, Partial<Resources>> = {
   fishery: { wood: 40, stone: 10 },
   workshop: { wood: 80, stone: 30, iron: 10 },
   infirmary: { wood: 70, stone: 50 },
+  tradingPost: { wood: 100, stone: 20, food: 50 },
 };
 
 export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: number; storage?: number; happiness?: number }> = {
@@ -166,6 +196,7 @@ export const BUILDING_STATS: Record<BuildingType, { housing?: number; workers?: 
   fishery: { workers: 1 },
   workshop: { workers: 1 },
   infirmary: { workers: 1, happiness: 0.6 },
+  tradingPost: { workers: 1 },
 };
 
 export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
@@ -182,6 +213,7 @@ export const RESOURCE_GENERATION: Record<BuildingType, Partial<Resources>> = {
   fishery: { food: 6 },
   workshop: { wood: 1, stone: 1 },
   infirmary: { },
+  tradingPost: { },
 };
 
 export const RESEARCH_TREE: ResearchTopic[] = [

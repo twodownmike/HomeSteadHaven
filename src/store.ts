@@ -1,10 +1,49 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+const generateTradeOffers = (day: number): TradeOffer[] => {
+    const offers: TradeOffer[] = [];
+    const count = 3;
+    const resources: ResourceType[] = ['wood', 'food', 'stone', 'iron'];
+    
+    for(let i=0; i<count; i++) {
+        const giveRes = resources[Math.floor(Math.random() * resources.length)];
+        let wantRes = resources[Math.floor(Math.random() * resources.length)];
+        while(wantRes === giveRes) {
+             wantRes = resources[Math.floor(Math.random() * resources.length)];
+        }
+        
+        const baseAmount = 20 + Math.floor(Math.random() * 50);
+        // Adjust amount based on value rarity (Iron > Stone > Food > Wood) roughly
+        // But for simplicity, let's keep it somewhat random but fair-ish.
+        
+        offers.push({
+            id: generateId(),
+            gives: { [giveRes]: baseAmount },
+            wants: { [wantRes]: Math.floor(baseAmount * (0.5 + Math.random())) }, // 0.5 to 1.5 exchange rate roughly
+            expiresAt: day + 5
+        });
+    }
+    return offers;
+};
+
+const getRandomTraits = (): Trait[] => {
+  const num = Math.random() > 0.7 ? 2 : 1;
+  const allTraits = Object.values(TRAIT_DEFINITIONS);
+  const selected: Trait[] = [];
+  for(let i=0; i<num; i++) {
+      const t = allTraits[Math.floor(Math.random() * allTraits.length)];
+      if(!selected.find(s => s.type === t.type)) {
+          selected.push(t);
+      }
+  }
+  return selected;
+};
 
 const initialBarn: Building = {
   id: 'barn-main',
@@ -32,8 +71,8 @@ export const useGameStore = create<GameState>()(
         iron: 0,
       },
       settlers: [
-          { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
-          { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
+          { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.strong] },
+          { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.fast] },
       ] as Settler[],
  
       happiness: 100,
@@ -101,6 +140,8 @@ export const useGameStore = create<GameState>()(
       unlockedResearch: [] as ResearchId[],
       currentResearch: null as ResearchId | null,
       researchProgress: 0,
+      tradeOffers: [] as TradeOffer[],
+      lastTradeRefresh: 0,
 
       addLog: (message: string, type: LogEntry['type'] = 'info') => {
           set((state) => {
@@ -436,6 +477,7 @@ export const useGameStore = create<GameState>()(
                         actionTimer: 0,
                         hunger: 100,
                         energy: 100,
+                        traits: getRandomTraits(),
                     }
                 ] : state.settlers,
             }));
@@ -529,6 +571,47 @@ export const useGameStore = create<GameState>()(
         state.addLog('Research cancelled.', 'info');
       },
 
+      acceptTrade: (offerId: string) => {
+          const state = get();
+          const offer = state.tradeOffers.find(o => o.id === offerId);
+          if (!offer) return;
+          
+          // Check costs
+          const canAfford = (Object.keys(offer.wants) as ResourceType[]).every(
+              res => (state.resources[res] || 0) >= (offer.wants[res] || 0)
+          );
+          
+          if (!canAfford) {
+              state.addLog('Not enough resources for this trade.', 'warning');
+              return;
+          }
+
+          set((s) => ({
+              resources: {
+                  ...s.resources,
+                  ...(Object.keys(offer.wants) as ResourceType[]).reduce((acc, res) => {
+                      acc[res] = s.resources[res] - (offer.wants[res] || 0);
+                      return acc;
+                  }, {} as Resources),
+                  ...(Object.keys(offer.gives) as ResourceType[]).reduce((acc, res) => {
+                      acc[res] = (s.resources[res] || 0) + (offer.gives[res] || 0);
+                      return acc;
+                  }, {} as Resources),
+              },
+              tradeOffers: s.tradeOffers.filter(o => o.id !== offerId)
+          }));
+          state.addLog('Trade completed!', 'success');
+      },
+
+      refreshTrades: () => {
+          const state = get();
+          set({
+              tradeOffers: generateTradeOffers(state.day),
+              lastTradeRefresh: state.day
+          });
+          state.addLog('New traders have arrived at the Trading Post.', 'info');
+      },
+
       loadSaveData: (data: Partial<GameSaveData>) => {
         const current = get();
         const incomingBuildings = data.buildings || current.buildings;
@@ -549,6 +632,8 @@ export const useGameStore = create<GameState>()(
           unlockedResearch: data.unlockedResearch || current.unlockedResearch,
           currentResearch: data.currentResearch ?? current.currentResearch,
           researchProgress: data.researchProgress ?? current.researchProgress,
+          tradeOffers: data.tradeOffers || [],
+          lastTradeRefresh: data.lastTradeRefresh || 0,
           selectedBuilding: null,
           selectedBuildingId: null,
           isBuilding: false,
@@ -599,6 +684,18 @@ export const useGameStore = create<GameState>()(
           const seasonRoll = newDay % 4;
           newSeason = seasonRoll < 1 ? 'spring' : seasonRoll < 2 ? 'summer' : seasonRoll < 3 ? 'autumn' : 'winter';
 
+          // Trading Post logic
+          let newTradeOffers = state.tradeOffers;
+          let newLastTradeRefresh = state.lastTradeRefresh;
+          
+          const hasTradingPost = state.buildings.some(b => b.type === 'tradingPost');
+          if (hasTradingPost && newDay - state.lastTradeRefresh > 3) { // Refresh every 3 days
+              newTradeOffers = generateTradeOffers(newDay);
+              newLastTradeRefresh = newDay;
+              const tradeLog: LogEntry = { id: generateId(), message: 'Traders have arrived with new offers.', timestamp: Date.now(), type: 'info' };
+              newLogs = [tradeLog, ...newLogs].slice(0, 20);
+          }
+
           // Settler AI (movement/work)
           newSettlers = newSettlers.map((settler) => {
             const timeOfDay = newDay % 1;
@@ -644,7 +741,9 @@ export const useGameStore = create<GameState>()(
               const dx = settler.targetPosition[0] - settler.position[0];
               const dz = settler.targetPosition[2] - settler.position[2];
               const dist = Math.hypot(dx, dz);
-              const speed = 0.08;
+              let speed = 0.08;
+              if (settler.traits.some(t => t.type === 'fast')) speed *= 1.5;
+
               if (dist < speed) {
                 return { ...settler, position: settler.targetPosition, targetPosition: null, state: 'idle' };
               }
@@ -658,13 +757,21 @@ export const useGameStore = create<GameState>()(
               };
             }
             // Needs adjustments
-            let hunger = Math.max(0, Math.min(100, settler.hunger - 0.1)); // gradual hunger drop
+            let hungerDrop = 0.1;
+            if (settler.traits.some(t => t.type === 'glutton')) hungerDrop *= 1.5;
+            if (settler.traits.some(t => t.type === 'ascetic')) hungerDrop *= 0.7;
+
+            let hunger = Math.max(0, Math.min(100, settler.hunger - hungerDrop)); // gradual hunger drop
             let energy = settler.energy;
 
             if (settler.state === 'working' || settler.state === 'walking') {
-              energy = Math.max(0, energy - 0.2);
+              let energyDrop = 0.2;
+              if (settler.traits.some(t => t.type === 'strong')) energyDrop *= 0.6;
+              energy = Math.max(0, energy - energyDrop);
             } else if (settler.state === 'resting') {
-              energy = Math.min(100, energy + 0.6);
+              let energyGain = 0.6;
+              if (settler.traits.some(t => t.type === 'insomniac')) energyGain *= 1.5;
+              energy = Math.min(100, energy + energyGain);
               hunger = Math.max(0, hunger - 0.05);
             } else {
               energy = Math.min(100, energy + 0.1);
@@ -674,6 +781,12 @@ export const useGameStore = create<GameState>()(
             if (hunger < 20) newHappiness = Math.max(0, newHappiness - 0.2);
             if (energy < 20) newHappiness = Math.max(0, newHappiness - 0.1);
             if (hunger > 70 && energy > 70) newHappiness = Math.min(100, newHappiness + 0.05);
+            
+            // Workaholic trait: gain happiness when working? or just don't lose it?
+            // Let's say workaholics gain a tiny bit of happiness when working
+            if (settler.state === 'working' && settler.traits.some(t => t.type === 'workaholic')) {
+                 newHappiness = Math.min(100, newHappiness + 0.01);
+            }
 
             return { ...settler, hunger, energy };
           });
@@ -761,6 +874,8 @@ export const useGameStore = create<GameState>()(
             unlockedResearch: state.unlockedResearch,
             currentResearch: state.currentResearch,
             researchProgress: state.researchProgress,
+            tradeOffers: newTradeOffers,
+            lastTradeRefresh: newLastTradeRefresh,
           };
         });
       },
@@ -786,8 +901,8 @@ export const useGameStore = create<GameState>()(
                 iron: 0,
             },
             settlers: [
-                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
-                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100 },
+                { id: 'settler-1', name: 'John', position: [0, 0, 0] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.strong] },
+                { id: 'settler-2', name: 'Jane', position: [2, 0, 2] as [number, number, number], targetPosition: null, state: 'idle', actionTimer: 0, hunger: 100, energy: 100, traits: [TRAIT_DEFINITIONS.fast] },
             ] as Settler[],
             happiness: 100,
             buildings: [initialBarn] as Building[],
@@ -804,6 +919,8 @@ export const useGameStore = create<GameState>()(
             unlockedResearch: [],
             currentResearch: null,
             researchProgress: 0,
+            tradeOffers: [],
+            lastTradeRefresh: 0,
         });
       },
     }),
@@ -833,6 +950,8 @@ export const useGameStore = create<GameState>()(
         unlockedResearch: state.unlockedResearch,
         currentResearch: state.currentResearch,
         researchProgress: state.researchProgress,
+        tradeOffers: state.tradeOffers,
+        lastTradeRefresh: state.lastTradeRefresh,
       }), // only persist these fields
     }
   )

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse, Zap, Utensils } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
@@ -47,11 +47,14 @@ export const GameUI: React.FC = () => {
     researchProgress,
     startResearch,
     cancelResearch,
+    tradeOffers,
+    acceptTrade,
   } = useGameStore();
   const [showMenu, setShowMenu] = useState(false);
   const [showBuildMenu, setShowBuildMenu] = useState(false);
   const [showObjectives, setShowObjectives] = useState(false);
   const [showResearch, setShowResearch] = useState(false);
+  const [showPopulation, setShowPopulation] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
@@ -200,6 +203,7 @@ export const GameUI: React.FC = () => {
       if (type === 'well') perks.push('Reduces rain/snow mood penalty.');
       if (type === 'bakery') perks.push('Extra food and morale.');
       if (type === 'warehouse') perks.push('Major storage expansion.');
+      if (type === 'tradingPost') perks.push('Trade resources with traveling merchants.');
       map[type] = perks;
     });
     return map;
@@ -245,7 +249,7 @@ export const GameUI: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-3 text-xs sm:text-sm">
+          <button onClick={() => setShowPopulation(true)} className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-3 text-xs sm:text-sm hover:bg-white/10 transition-colors">
             <div className="flex items-center gap-1">
               <Users className="w-3 h-3 text-gray-300" />
               <span>{settlers.length}</span>
@@ -255,7 +259,7 @@ export const GameUI: React.FC = () => {
               <HeartPulse className="w-3 h-3" />
               <span>{Math.round((avgHunger + avgEnergy) / 2)}%</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -405,6 +409,88 @@ export const GameUI: React.FC = () => {
         </div>
       )}
 
+      {/* Population Panel */}
+      {showPopulation && (
+        <div className="pointer-events-auto w-full max-w-4xl bg-black/85 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-300" />
+              <h3 className="text-lg font-bold">Population</h3>
+              <span className="text-xs text-gray-400">({settlers.length} Settlers)</span>
+            </div>
+            <button onClick={() => setShowPopulation(false)} className="text-gray-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {settlers.map(settler => {
+                const jobBuilding = settler.job ? buildings.find(b => b.id === settler.job) : null;
+                
+                return (
+                    <div key={settler.id} className="p-3 rounded-xl border border-white/10 bg-white/5 flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <div className="font-bold text-sm">{settler.name}</div>
+                                <div className="text-xs text-gray-400 capitalize">{settler.state}</div>
+                            </div>
+                            {jobBuilding ? (
+                                <div className="text-[10px] px-2 py-1 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30 capitalize truncate max-w-[100px]">
+                                    {jobBuilding.type}
+                                </div>
+                            ) : (
+                                <div className="text-[10px] px-2 py-1 rounded bg-white/10 text-gray-400 border border-white/10">
+                                    Unemployed
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1 text-xs text-gray-300">
+                                    <Utensils className="w-3 h-3 text-orange-300" />
+                                    <span>{Math.floor(settler.hunger)}%</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-orange-400" style={{ width: `${settler.hunger}%` }} />
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1 text-xs text-gray-300">
+                                    <Zap className="w-3 h-3 text-yellow-300" />
+                                    <span>{Math.floor(settler.energy)}%</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-yellow-400" style={{ width: `${settler.energy}%` }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {settler.traits && settler.traits.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-white/5">
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1">Traits</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {settler.traits.map((trait, i) => (
+                                        <div key={i} className="group relative cursor-help">
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30">
+                                                {trait.name}
+                                            </span>
+                                            {/* Tooltip */}
+                                            <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block w-32 p-2 bg-black/90 text-xs text-white rounded border border-white/10 z-50">
+                                                {trait.description}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Event Logs */}
       <div className="absolute bottom-32 left-3 sm:left-4 flex flex-col gap-2 w-[300px] pointer-events-none opacity-80">
           {logs.slice(0, 5).map((log) => (
@@ -492,6 +578,53 @@ export const GameUI: React.FC = () => {
                 ))}
               </div>
             </button>
+
+            {selectedBuildingData.type === 'tradingPost' && (
+              <div className="flex flex-col gap-2 bg-white/5 border border-white/10 rounded-xl p-3">
+                <div className="flex items-center justify-between">
+                   <h4 className="font-bold text-sm text-amber-300">Active Trade Offers</h4>
+                   <span className="text-[10px] text-gray-400">Refreshes every 3 days</span>
+                </div>
+                {tradeOffers.length === 0 ? (
+                    <div className="text-xs text-gray-400 italic py-2 text-center">No traders currently available.</div>
+                ) : (
+                    <div className="flex flex-col gap-2">
+                        {tradeOffers.map(offer => {
+                            const canAfford = (Object.keys(offer.wants) as ResourceType[]).every(res => resources[res] >= (offer.wants[res] || 0));
+                            return (
+                                <div key={offer.id} className="bg-black/20 rounded-lg p-2 flex items-center justify-between">
+                                    <div className="flex flex-col text-xs gap-1">
+                                        <div className="flex items-center gap-1 text-red-300">
+                                            <span className="font-bold">Give:</span>
+                                            {Object.entries(offer.wants).map(([k, v]) => (
+                                                <span key={k} className="flex items-center gap-0.5">
+                                                    {v} <ResourceIcon type={k as ResourceType} />
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <div className="flex items-center gap-1 text-green-300">
+                                            <span className="font-bold">Get:</span>
+                                            {Object.entries(offer.gives).map(([k, v]) => (
+                                                <span key={k} className="flex items-center gap-0.5">
+                                                    {v} <ResourceIcon type={k as ResourceType} />
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => acceptTrade(offer.id)}
+                                        disabled={!canAfford}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${canAfford ? 'bg-green-600/30 border-green-500 text-green-100 hover:bg-green-600/50' : 'bg-gray-700/30 border-gray-600 text-gray-500 cursor-not-allowed'}`}
+                                    >
+                                        Trade
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={() => demolishBuilding(selectedBuildingData.id)}
