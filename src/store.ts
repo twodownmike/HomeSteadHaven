@@ -37,6 +37,8 @@ const generateTradeOffers = (day: number): TradeOffer[] => {
     return offers;
 };
 
+export const BASE_STORAGE_CAP = 150;
+
 const getHousingCapacity = (buildings: Building[] = []): number => {
   return buildings.reduce((acc, b) => {
     const stats = BUILDING_STATS[b.type];
@@ -46,12 +48,11 @@ const getHousingCapacity = (buildings: Building[] = []): number => {
 };
 
 const getMaxStorage = (buildings: Building[] = []): number => {
-  const baseStorage = 100;
   const additionalStorage = buildings.reduce(
     (acc, b) => acc + ((BUILDING_STATS[b.type]?.storage || 0) * (b.level || 1)),
     0
   );
-  return baseStorage + additionalStorage;
+  return BASE_STORAGE_CAP + additionalStorage;
 };
 
 const clamp = (value: number, min: number, max: number) =>
@@ -231,7 +232,6 @@ const initialBarn: Building = {
 
 export const BARN_LEVEL_REQUIREMENTS: Partial<Record<BuildingType, number>> = {
   mine: 2,
-  warehouse: 2,
   bakery: 2,
   watchtower: 2,
   fishery: 3,
