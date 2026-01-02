@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS, FloatingEffect, Expedition } from './types';
+import { GameState, BuildingType, ResourceType, BUILDING_COSTS, NatureType, BUILDING_STATS, LogEntry, WeatherType, Season, Settler, Building, Objective, GameSaveData, RESOURCE_GENERATION, ResearchId, RESEARCH_TREE, BUILDING_RESEARCH_REQ, Resources, Trait, TRAIT_DEFINITIONS, TradeOffer, BUILDING_WORKSTATIONS, FloatingEffect, Expedition, ActiveDailyEvent, DailyEventOption } from './types';
 
 // Simple ID generator to avoid extra dependency for now if uuid is not installed, 
 // but I'll use a simple random string for now.
@@ -45,6 +45,18 @@ const getHousingCapacity = (buildings: Building[] = []): number => {
   }, 0);
 };
 
+const getMaxStorage = (buildings: Building[] = []): number => {
+  const baseStorage = 100;
+  const additionalStorage = buildings.reduce(
+    (acc, b) => acc + ((BUILDING_STATS[b.type]?.storage || 0) * (b.level || 1)),
+    0
+  );
+  return baseStorage + additionalStorage;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
 const getRandomTraits = (): Trait[] => {
   const num = Math.random() > 0.7 ? 2 : 1;
   const allTraits = Object.values(TRAIT_DEFINITIONS);
@@ -56,6 +68,156 @@ const getRandomTraits = (): Trait[] => {
       }
   }
   return selected;
+};
+
+const createSettler = (nameIndex: number, buildings: Building[] = []): Settler => {
+  const barn = (buildings || []).find((b) => b.type === 'barn');
+  const spawnPosition: [number, number, number] = barn
+    ? [
+        barn.position[0] + (Math.random() - 0.5) * 2,
+        barn.position[1],
+        barn.position[2] + (Math.random() - 0.5) * 2,
+      ]
+    : [0, 0, 0];
+
+  return {
+    id: generateId(),
+    name: `Settler ${nameIndex}`,
+    position: spawnPosition,
+    targetPosition: null,
+    state: 'idle',
+    actionTimer: 0,
+    hunger: 100,
+    energy: 100,
+    health: 100,
+    traits: getRandomTraits(),
+  };
+};
+
+type DailyEventTemplate = Omit<ActiveDailyEvent, 'id' | 'dayTriggered' | 'options'> & {
+  id: string;
+  options: DailyEventOption[];
+};
+
+const DAILY_EVENT_LIBRARY: DailyEventTemplate[] = [
+  {
+    id: 'wandering-bard',
+    title: 'Wandering Bard',
+    description: 'A traveling bard offers to lift spirits with a nighttime performance.',
+    flavor: 'Music drifts across the homestead, promising a brief respite from toil.',
+    icon: 'music',
+    accentColor: '#fcd34d',
+    options: [
+      {
+        id: 'host',
+        label: 'Host the performance (40 Food)',
+        description: 'Provide a feast to draw everyone together.',
+        type: 'success',
+        cost: { food: 40 },
+        happinessDelta: 10,
+        logMessage: 'The bard’s songs raised morale across the camp!',
+        floatingText: '+Happiness',
+      },
+      {
+        id: 'decline',
+        label: 'Decline politely',
+        description: 'Supplies are scarce; focus on survival.',
+        type: 'info',
+        happinessDelta: -3,
+        logMessage: 'The settlers understand, though the night feels quieter.',
+      },
+    ],
+  },
+  {
+    id: 'mysterious-trader',
+    title: 'Mysterious Trader',
+    description: 'A cloaked trader claims to have rare relics for sale.',
+    flavor: 'Glinting artifacts spill from velvet bags.',
+    icon: 'coins',
+    accentColor: '#f472b6',
+    options: [
+      {
+        id: 'buy',
+        label: 'Purchase relic (60 Wood / 30 Stone)',
+        description: 'Trade bulky materials for knowledge of the past.',
+        type: 'success',
+        cost: { wood: 60, stone: 30 },
+        reward: { relics: 1 },
+        logMessage: 'The trader leaves behind an ancient relic!',
+        floatingText: '+1 Relic',
+      },
+      {
+        id: 'barter',
+        label: 'Barter modestly',
+        description: 'Offer only what you can spare.',
+        type: 'info',
+        cost: { wood: 25 },
+        reward: { food: 20 },
+        logMessage: 'A fair exchange keeps the pantry stocked.',
+      },
+      {
+        id: 'refuse',
+        label: 'Refuse and send them away',
+        description: 'Seems risky—maybe a scam.',
+        type: 'warning',
+        happinessDelta: -5,
+        logMessage: 'The trader scoffs, and the settlers grumble about missed opportunities.',
+      },
+    ],
+  },
+  {
+    id: 'lost-family',
+    title: 'Lost Family',
+    description: 'A family of refugees begs to settle near your barn.',
+    flavor: 'They carry little besides hope.',
+    icon: 'users',
+    accentColor: '#4ade80',
+    options: [
+      {
+        id: 'welcome',
+        label: 'Offer shelter and food',
+        description: 'Share resources to grow the community.',
+        type: 'success',
+        cost: { food: 30 },
+        settlersDelta: 2,
+        happinessDelta: 5,
+        logMessage: 'New faces bring fresh energy to the homestead!',
+        floatingText: '+New Settlers',
+      },
+      {
+        id: 'limited',
+        label: 'Offer supplies but no housing',
+        description: 'Help them move on.',
+        type: 'info',
+        cost: { food: 20 },
+        happinessDelta: 2,
+        logMessage: 'They thank you before heading east.',
+      },
+      {
+        id: 'deny',
+        label: 'Turn them away',
+        description: 'Resources are too tight.',
+        type: 'danger',
+        happinessDelta: -10,
+        logMessage: 'Morale dips as you refuse the desperate family.',
+      },
+    ],
+  },
+];
+
+const generateDailyEventForDay = (day: number): ActiveDailyEvent | null => {
+  // 45% chance to spawn an event on new day
+  if (Math.random() > 0.45) return null;
+  const template = DAILY_EVENT_LIBRARY[Math.floor(Math.random() * DAILY_EVENT_LIBRARY.length)];
+  return {
+    ...template,
+    id: `${template.id}-${generateId()}`,
+    options: template.options.map((opt) => ({
+      ...opt,
+      id: `${template.id}-${opt.id}-${generateId()}`,
+    })),
+    dayTriggered: day,
+  };
 };
 
 const initialBarn: Building = {
@@ -180,6 +342,8 @@ export const useGameStore = create<GameState>()(
       lastTradeRefresh: 0,
       expeditions: [] as Expedition[],
       floatingTexts: [] as FloatingEffect[],
+      dailyEvent: null,
+      lastEventDay: 0,
 
       addFloatingText: (text: string, position: [number, number, number], color: string = 'text-white') => {
         set((state) => ({
@@ -215,10 +379,7 @@ export const useGameStore = create<GameState>()(
 
       addResource: (type: ResourceType, amount: number) =>
         set((state) => {
-            const baseStorage = 100;
-            const additionalStorage = (state.buildings || []).reduce((acc, b) => acc + ((BUILDING_STATS[b.type]?.storage || 0) * b.level), 0);
-            const maxStorage = baseStorage + additionalStorage;
-            
+            const maxStorage = getMaxStorage(state.buildings || []);
             const currentAmount = state.resources[type];
             const newAmount = Math.min(currentAmount + amount, maxStorage);
             
@@ -515,18 +676,8 @@ export const useGameStore = create<GameState>()(
             ]
           : [0, 0, 0];
 
-        const newSettler: Settler = {
-          id: generateId(),
-          name: `Settler ${state.settlers.length + 1}`,
-          position: spawnPosition,
-          targetPosition: null,
-          state: 'idle',
-          actionTimer: 0,
-          hunger: 100,
-          energy: 100,
-          health: 100,
-          traits: getRandomTraits(),
-        };
+        const newSettler = createSettler(state.settlers.length + 1, state.buildings || []);
+        newSettler.position = spawnPosition;
 
         set((prevState) => {
           const updatedResources = { ...prevState.resources };
@@ -548,6 +699,79 @@ export const useGameStore = create<GameState>()(
           [spawnPosition[0], spawnPosition[1] + 2.5, spawnPosition[2]],
           'text-emerald-300'
         );
+      },
+
+      resolveDailyEvent: (optionId: string) => {
+        const state = get();
+        const event = state.dailyEvent;
+        if (!event) return;
+        const option = event.options.find((o) => o.id === optionId);
+        if (!option) return;
+
+        const costEntries = Object.entries(option.cost || {}) as [ResourceType, number][];
+        const canAffordCost = costEntries.every(
+          ([res, amt]) => (state.resources[res] || 0) >= (amt || 0)
+        );
+        if (!canAffordCost) {
+          state.addLog('Not enough resources for that choice.', 'warning');
+          return;
+        }
+
+        const updatedResources = { ...state.resources };
+        costEntries.forEach(([res, amt]) => {
+          updatedResources[res] = Math.max(0, (updatedResources[res] || 0) - (amt || 0));
+        });
+
+        const maxStorage = getMaxStorage(state.buildings || []);
+        (Object.entries(option.reward || {}) as [ResourceType, number][]).forEach(([res, amt]) => {
+          if (!amt) return;
+          updatedResources[res] = Math.min(maxStorage, (updatedResources[res] || 0) + amt);
+        });
+
+        if (option.wasteDelta) {
+          updatedResources.waste = clamp((updatedResources.waste || 0) + option.wasteDelta, 0, 1000);
+        }
+
+        let updatedSettlers = [...state.settlers];
+        if ((option.settlersDelta || 0) > 0) {
+          const housingCapacity = getHousingCapacity(state.buildings || []);
+          const availableHousing = housingCapacity - updatedSettlers.length;
+          const toAdd = Math.min(option.settlersDelta || 0, Math.max(0, availableHousing));
+          for (let i = 0; i < toAdd; i++) {
+            updatedSettlers.push(createSettler(updatedSettlers.length + 1, state.buildings || []));
+          }
+          if (toAdd < (option.settlersDelta || 0)) {
+            state.addLog('Not enough housing for everyone who wanted to stay.', 'warning');
+          }
+        } else if ((option.settlersDelta || 0) < 0) {
+          const toRemove = Math.min(Math.abs(option.settlersDelta || 0), updatedSettlers.length);
+          updatedSettlers = updatedSettlers.slice(0, Math.max(0, updatedSettlers.length - toRemove));
+        }
+
+        const newHappiness = clamp(
+          state.happiness + (option.happinessDelta || 0),
+          0,
+          100
+        );
+
+        if (option.logMessage) {
+          state.addLog(option.logMessage, option.type);
+        }
+        if (option.floatingText) {
+          const barn = (state.buildings || []).find((b) => b.type === 'barn');
+          const pos: [number, number, number] = barn
+            ? [barn.position[0], barn.position[1] + 3, barn.position[2]]
+            : [0, 2, 0];
+          get().addFloatingText(option.floatingText, pos, 'text-white');
+        }
+
+        set({
+          resources: updatedResources,
+          settlers: updatedSettlers,
+          happiness: newHappiness,
+          dailyEvent: null,
+          lastEventDay: event.dayTriggered,
+        });
       },
 
       sendExpedition: () => {
@@ -749,6 +973,8 @@ export const useGameStore = create<GameState>()(
           selectedBuilding: null,
           selectedBuildingId: null,
           isBuilding: false,
+          dailyEvent: data.dailyEvent ?? null,
+          lastEventDay: data.lastEventDay ?? current.lastEventDay ?? 0,
         });
         current.addLog('Loaded save data.', 'info');
       },
@@ -769,9 +995,24 @@ export const useGameStore = create<GameState>()(
           );
           const maxStorage = baseStorage + additionalStorage;
 
+          const prevDayInt = Math.floor(state.day);
           const newDay = state.day + 0.005;
+          const currentDayInt = Math.floor(newDay);
           const seasonRoll = newDay % 4;
           newSeason = seasonRoll < 1 ? 'spring' : seasonRoll < 2 ? 'summer' : seasonRoll < 3 ? 'autumn' : 'winter';
+
+          let nextDailyEvent = state.dailyEvent;
+          let nextLastEventDay = state.lastEventDay || 0;
+
+          if (currentDayInt > prevDayInt && !nextDailyEvent) {
+            if (currentDayInt - nextLastEventDay >= 1) {
+              const generatedEvent = generateDailyEventForDay(currentDayInt);
+              if (generatedEvent) {
+                nextDailyEvent = generatedEvent;
+                state.addLog(generatedEvent.title, 'info');
+              }
+            }
+          }
 
           // Resource generation and Production Chains
           let currentProduction: Record<ResourceType, number> = {
@@ -1255,6 +1496,8 @@ export const useGameStore = create<GameState>()(
                 tradeOffers: newTradeOffers,
                 lastTradeRefresh: newLastTradeRefresh,
                 productionStats: currentProduction,
+                dailyEvent: nextDailyEvent,
+                lastEventDay: nextLastEventDay,
               };
             } else {
               return {
@@ -1278,6 +1521,8 @@ export const useGameStore = create<GameState>()(
                 tradeOffers: newTradeOffers,
                 lastTradeRefresh: newLastTradeRefresh,
                 productionStats: currentProduction,
+                dailyEvent: nextDailyEvent,
+                lastEventDay: nextLastEventDay,
               };
             }
           }
@@ -1318,6 +1563,8 @@ export const useGameStore = create<GameState>()(
             tradeOffers: newTradeOffers,
             lastTradeRefresh: newLastTradeRefresh,
             productionStats: currentProduction,
+            dailyEvent: nextDailyEvent,
+            lastEventDay: nextLastEventDay,
           };
         });
       },
@@ -1376,6 +1623,8 @@ export const useGameStore = create<GameState>()(
             unlockedResearch: [],
             currentResearch: null,
             researchProgress: 0,
+            dailyEvent: null,
+            lastEventDay: 0,
         });
       },
     }),
@@ -1463,6 +1712,8 @@ export const useGameStore = create<GameState>()(
         tradeOffers: state.tradeOffers,
         lastTradeRefresh: state.lastTradeRefresh,
         productionStats: state.productionStats,
+        dailyEvent: state.dailyEvent,
+        lastEventDay: state.lastEventDay,
       }), // only persist these fields
     }
   )

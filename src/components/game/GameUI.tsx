@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useGameStore, SETTLER_RECRUIT_COST } from '../../store';
 import { useAudioManager } from '../../hooks/useAudio';
 import { BuildingType, BUILDING_COSTS, ResourceType, BUILDING_STATS, Objective, RESOURCE_GENERATION, RESEARCH_TREE, ResearchId } from '../../types';
-import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse, Zap, Utensils, UserPlus } from 'lucide-react';
+import { Trees, Wheat, Hammer, Mountain, RefreshCw, ArrowUpCircle, Trash2, X, CloudRain, Sun, Snowflake, Smile, Trophy, Gift, PartyPopper, Compass, CheckCircle2, Save, LogIn, LogOut, Brain, Menu, Users, HeartPulse, Zap, Utensils, UserPlus, Sparkles } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, saveGameData, loadGameData } from '../../firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,10 +35,10 @@ const ResourceDisplay = ({ type, amount }: { type: ResourceType, amount: number 
     <motion.div 
       animate={isBumping ? { scale: [1, 1.2, 1], color: ['#fff', '#4ade80', '#fff'] } : {}}
       transition={{ duration: 0.3 }}
-      className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-2 min-w-fit"
+      className="bg-black/90 backdrop-blur-xl px-3 py-2 rounded-xl border border-white/20 text-white shadow-2xl flex items-center gap-2 min-w-fit ring-1 ring-white/5"
     >
       <ResourceIcon type={type} />
-      <div className="text-sm font-bold">{Math.floor(amount)}</div>
+      <div className="text-sm font-bold tracking-tight">{Math.floor(amount)}</div>
     </motion.div>
   );
 };
@@ -82,6 +82,9 @@ export const GameUI: React.FC = () => {
     acceptTrade,
     expeditions,
     productionStats,
+    dailyEvent,
+    lastEventDay,
+    resolveDailyEvent,
     cameraTarget,
     setCameraTarget,
   } = useGameStore();
@@ -92,6 +95,7 @@ export const GameUI: React.FC = () => {
   const [showResearch, setShowResearch] = useState(false);
   const [showPopulation, setShowPopulation] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
@@ -242,6 +246,8 @@ export const GameUI: React.FC = () => {
       lastTradeRefresh,
       expeditions,
       productionStats,
+      dailyEvent,
+      lastEventDay,
     });
     setIsSaving(false);
   };
@@ -318,20 +324,167 @@ export const GameUI: React.FC = () => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowPopulation(true)} 
-            className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white shadow-xl flex items-center gap-3 text-xs sm:text-sm hover:bg-white/10 transition-colors"
+            className="bg-black/90 backdrop-blur-xl px-3 py-2 rounded-xl border border-white/20 text-white shadow-2xl flex items-center gap-3 text-xs sm:text-sm hover:bg-white/10 transition-colors ring-1 ring-white/5"
           >
             <div className="flex items-center gap-1">
-              <Users className="w-3 h-3 text-gray-300" />
-              <span>{settlers.length}</span>
+              <Users className="w-3 h-3 text-blue-300" />
+              <span className="font-semibold">{settlers.length}</span>
             </div>
             <div className="w-px h-3 bg-white/20" />
-            <div className={`flex items-center gap-1 ${lowNeeds > 0 ? 'text-yellow-300' : 'text-gray-300'}`}>
+            <div className={`flex items-center gap-1 ${lowNeeds > 0 ? 'text-yellow-400' : 'text-green-300'}`}>
               <HeartPulse className="w-3 h-3" />
-              <span>{Math.round((avgHunger + avgEnergy) / 2)}%</span>
+              <span className="font-semibold">{Math.round((avgHunger + avgEnergy) / 2)}%</span>
             </div>
           </motion.button>
         </div>
       </div>
+
+      {/* Log History Panel Toggle */}
+      <div className="absolute bottom-4 left-4 z-50 pointer-events-auto">
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowLogs(!showLogs)}
+          className={`p-3 rounded-full border shadow-2xl backdrop-blur-xl transition-all ${
+            showLogs ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/80 border-white/20 text-white/70 hover:text-white'
+          }`}
+        >
+          <RefreshCw className={`w-5 h-5 ${showLogs ? 'rotate-180' : ''} transition-transform duration-500`} />
+        </motion.button>
+      </div>
+
+      {/* Daily Event Panel */}
+      <AnimatePresence>
+        {dailyEvent && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            className="pointer-events-auto fixed top-24 right-4 w-full max-w-md bg-black/90 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl p-5 z-50 ring-1 ring-white/10"
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className="p-3 rounded-2xl"
+                style={{ background: `${dailyEvent.accentColor || '#fbbf24'}33` }}
+              >
+                <Sparkles
+                  className="w-5 h-5"
+                  style={{ color: dailyEvent.accentColor || '#fbbf24' }}
+                />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs uppercase tracking-widest text-white/60">
+                  Daily Event
+                </div>
+                <h3 className="text-xl font-bold text-white">{dailyEvent.title}</h3>
+                <p className="text-sm text-white/80 mt-1">{dailyEvent.description}</p>
+                {dailyEvent.flavor && (
+                  <p className="text-xs text-white/50 italic mt-2">{dailyEvent.flavor}</p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 space-y-3">
+              {dailyEvent.options.map((option) => {
+                const costEntries = Object.entries(option.cost || {}) as [ResourceType, number][];
+                const rewardEntries = Object.entries(option.reward || {}) as [ResourceType, number][];
+                const canAfford = costEntries.every(
+                  ([res, amt]) => (resources?.[res] || 0) >= (amt || 0)
+                );
+                const housingWarning = Boolean(
+                  option.settlersDelta && option.settlersDelta > 0 && !hasHousingRoom
+                );
+                const disabled = (!canAfford && costEntries.length > 0) || housingWarning;
+                const btnColor =
+                  option.type === 'success'
+                    ? 'bg-emerald-600/30 border-emerald-400 text-emerald-50'
+                    : option.type === 'warning'
+                    ? 'bg-amber-600/30 border-amber-400 text-amber-50'
+                    : option.type === 'danger'
+                    ? 'bg-red-600/30 border-red-400 text-red-50'
+                    : 'bg-slate-600/30 border-slate-400 text-slate-50';
+                return (
+                  <motion.button
+                    key={option.id}
+                    whileHover={disabled ? {} : { scale: 1.01, x: 4 }}
+                    whileTap={disabled ? {} : { scale: 0.99 }}
+                    disabled={disabled}
+                    onClick={() => {
+                      playSound('click');
+                      resolveDailyEvent(option.id);
+                    }}
+                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${btnColor} ${
+                      disabled ? 'opacity-40 cursor-not-allowed' : 'shadow-lg'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">{option.label}</div>
+                        <p className="text-xs text-white/70 mt-0.5">{option.description}</p>
+                      </div>
+                      {!canAfford && costEntries.length > 0 && (
+                        <span className="text-[10px] uppercase tracking-widest text-red-200">
+                          Need Resources
+                        </span>
+                      )}
+                    </div>
+                    {costEntries.length > 0 && (
+                      <div className="flex flex-wrap gap-2 text-[11px] text-white/70 mt-2">
+                        {costEntries.map(([res, amt]) => (
+                          <span
+                            key={res}
+                            className={`px-2 py-0.5 rounded-full border ${
+                              (resources?.[res] || 0) < amt
+                                ? 'border-red-400/70 text-red-200'
+                                : 'border-white/20 text-white'
+                            }`}
+                          >
+                            -{amt} {res}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {(rewardEntries.length > 0 ||
+                      option.happinessDelta ||
+                      option.settlersDelta ||
+                      option.wasteDelta) && (
+                      <div className="flex flex-wrap gap-2 text-[11px] text-white/80 mt-2">
+                        {rewardEntries.map(([res, amt]) => (
+                          <span key={res} className="px-2 py-0.5 rounded-full bg-white/10">
+                            +{amt} {res}
+                          </span>
+                        ))}
+                        {option.happinessDelta && (
+                          <span className="px-2 py-0.5 rounded-full bg-white/10">
+                            {option.happinessDelta > 0 ? '+' : ''}
+                            {option.happinessDelta} Happiness
+                          </span>
+                        )}
+                        {option.settlersDelta && (
+                          <span className="px-2 py-0.5 rounded-full bg-white/10">
+                            {option.settlersDelta > 0 ? '+' : ''}
+                            {option.settlersDelta} Settlers
+                          </span>
+                        )}
+                        {option.wasteDelta && (
+                          <span className="px-2 py-0.5 rounded-full bg-white/10">
+                            {option.wasteDelta > 0 ? '+' : ''}
+                            {option.wasteDelta} Waste
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {housingWarning && (
+                      <div className="text-[11px] text-red-200 mt-2">
+                        Build more housing before taking in newcomers.
+                      </div>
+                    )}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Menu Drawer */}
       <AnimatePresence>
@@ -551,7 +704,7 @@ export const GameUI: React.FC = () => {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="pointer-events-auto w-full max-w-2xl bg-black/90 backdrop-blur-xl p-6 rounded-3xl border border-white/10 text-white shadow-2xl mx-auto mt-20 z-50"
+            className="pointer-events-auto w-full max-w-2xl bg-black/95 backdrop-blur-2xl p-8 rounded-[2rem] border border-white/20 text-white shadow-2xl mx-auto mt-20 z-50 ring-1 ring-white/10"
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
@@ -596,7 +749,7 @@ export const GameUI: React.FC = () => {
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 50, opacity: 0 }}
-            className="pointer-events-auto w-full max-w-4xl bg-black/85 backdrop-blur-md p-4 rounded-2xl border border-cyan-400/30 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto"
+            className="pointer-events-auto w-full max-w-4xl bg-black/95 backdrop-blur-2xl p-6 rounded-[2rem] border border-cyan-400/30 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto ring-1 ring-cyan-400/10"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -688,7 +841,7 @@ export const GameUI: React.FC = () => {
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="pointer-events-auto w-full max-w-4xl bg-black/85 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto z-50"
+            className="pointer-events-auto w-full max-w-4xl bg-black/95 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/20 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto z-50 ring-1 ring-white/10"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -831,26 +984,41 @@ export const GameUI: React.FC = () => {
       </AnimatePresence>
 
             {/* Event Logs */}
-            <div className="absolute bottom-32 left-3 sm:left-4 flex flex-col gap-2 w-[300px] pointer-events-none">
-                <AnimatePresence>
-                    {(logs || []).slice(0, 5).map((log) => (
+            <div className="absolute bottom-20 left-4 flex flex-col gap-2 w-[320px] pointer-events-none z-40">
+                <AnimatePresence mode="popLayout">
+                    {(showLogs ? logs : (logs || []).slice(0, 5)).map((log) => (
                         <motion.div 
                             key={log.id}
-                            initial={{ x: -20, opacity: 0 }}
-                            animate={{ x: 0, opacity: 0.8 }}
-                            exit={{ x: 20, opacity: 0 }}
+                            layout
+                            initial={{ x: -20, opacity: 0, scale: 0.9 }}
+                            animate={{ x: 0, opacity: 1, scale: 1 }}
+                            exit={{ x: 20, opacity: 0, scale: 0.9 }}
                             className={`
-                                p-2 rounded-lg text-sm font-medium backdrop-blur-md shadow-lg border border-white/5
-                                ${log.type === 'success' ? 'bg-green-900/60 text-green-100' : 
-                                log.type === 'warning' ? 'bg-yellow-900/60 text-yellow-100' :
-                                log.type === 'danger' ? 'bg-red-900/60 text-red-100' :
-                                'bg-gray-900/60 text-gray-100'}
+                                p-3 rounded-xl text-sm font-semibold backdrop-blur-xl shadow-2xl border ring-1 ring-inset
+                                ${log.type === 'success' ? 'bg-emerald-900/90 text-emerald-50 border-emerald-400/30 ring-emerald-400/10' : 
+                                log.type === 'warning' ? 'bg-amber-900/90 text-amber-50 border-amber-400/30 ring-amber-400/10' :
+                                log.type === 'danger' ? 'bg-red-900/90 text-red-50 border-red-400/30 ring-red-400/10' :
+                                'bg-slate-900/90 text-slate-50 border-slate-400/30 ring-slate-400/10'}
                             `}
                         >
-                            {log.message}
+                            <div className="flex justify-between items-start gap-2">
+                              <span>{log.message}</span>
+                              <span className="text-[10px] opacity-40 whitespace-nowrap">
+                                {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </span>
+                            </div>
                         </motion.div>
                     ))}
                 </AnimatePresence>
+                {logs.length > 5 && !showLogs && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.6 }}
+                    className="text-[10px] text-white/50 px-2 font-bold uppercase tracking-widest"
+                  >
+                    + {logs.length - 5} more messages
+                  </motion.div>
+                )}
             </div>
 
       {/* Building Inspection Panel */}
@@ -860,7 +1028,7 @@ export const GameUI: React.FC = () => {
             initial={{ scale: 0.9, opacity: 0, x: '-50%', y: '-40%' }}
             animate={{ scale: 1, opacity: 1, x: '-50%', y: '-50%' }}
             exit={{ scale: 0.9, opacity: 0, x: '-50%', y: '-40%' }}
-            className="absolute top-1/2 left-1/2 bg-black/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-white shadow-2xl pointer-events-auto z-40 min-w-[300px] max-w-[90vw]"
+            className="absolute top-1/2 left-1/2 bg-black/95 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/20 text-white shadow-2xl pointer-events-auto z-40 min-w-[320px] max-w-[90vw] ring-1 ring-white/10"
           >
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -1026,7 +1194,7 @@ export const GameUI: React.FC = () => {
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="pointer-events-auto w-full max-w-4xl bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto z-50"
+            className="pointer-events-auto w-full max-w-4xl bg-black/95 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/20 text-white shadow-2xl mx-auto mt-20 sm:mt-24 max-h-[70vh] overflow-y-auto z-50 ring-1 ring-white/10"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">

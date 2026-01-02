@@ -113,6 +113,31 @@ export interface FloatingEffect {
   color: string;
 }
 
+export interface DailyEventOption {
+  id: string;
+  label: string;
+  description: string;
+  type: LogEntry['type'];
+  cost?: Partial<Resources>;
+  reward?: Partial<Resources>;
+  happinessDelta?: number;
+  settlersDelta?: number;
+  wasteDelta?: number;
+  logMessage?: string;
+  floatingText?: string;
+}
+
+export interface ActiveDailyEvent {
+  id: string;
+  title: string;
+  description: string;
+  flavor?: string;
+  icon?: string;
+  accentColor?: string;
+  options: DailyEventOption[];
+  dayTriggered: number;
+}
+
 export interface GameSaveData {
   resources: Resources;
   settlers: Settler[];
@@ -131,6 +156,8 @@ export interface GameSaveData {
   lastTradeRefresh: number;
   expeditions: Expedition[];
   productionStats: Record<ResourceType, number>;
+  dailyEvent: ActiveDailyEvent | null;
+  lastEventDay: number;
 }
 
 export interface TradeOffer {
@@ -173,6 +200,8 @@ export interface GameState {
   lastTradeRefresh: number; // Day number
   expeditions: Expedition[];
   floatingTexts: FloatingEffect[];
+  dailyEvent: ActiveDailyEvent | null;
+  lastEventDay: number;
   
   // Actions
   addResource: (type: ResourceType, amount: number) => void;
@@ -195,6 +224,7 @@ export interface GameState {
   cancelResearch: () => void;
   acceptTrade: (offerId: string) => void;
   refreshTrades: () => void;
+  resolveDailyEvent: (optionId: string) => void;
   addFloatingText: (text: string, position: [number, number, number], color?: string) => void;
   removeFloatingText: (id: string) => void;
   setCameraTarget: (id: string | null) => void;
